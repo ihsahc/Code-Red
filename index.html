@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dispenser Finder</title>
+
+  <!-- Leaflet (the map library), loaded from the internet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>Dispenser Finder</h1>
+    <span class="view-tag">Student View</span>
+  </header>
+
+  <!-- The map fills the middle of the screen -->
+  <main id="map" aria-label="Map of dispensers"></main>
+
+  <!-- Bottom panel: legend, the main button, and the result -->
+  <section class="panel">
+    <ul class="legend" aria-label="Legend">
+      <li><span class="dot green">✓</span> Over 50%</li>
+      <li><span class="dot yellow">~</span> 15–50%</li>
+      <li><span class="dot red">!</span> Under 15%</li>
+      <li><span class="dot gray">?</span> Offline</li>
+    </ul>
+
+    <button id="find-btn" class="primary">Find nearest stocked (15%+)</button>
+
+    <!-- Shown only if the user says no to location access -->
+    <div id="fallback" class="fallback" hidden>
+      <label for="building-select">Location off. Pick your building instead:</label>
+      <select id="building-select"></select>
+    </div>
+
+    <div id="result" class="result" role="status" aria-live="polite" hidden></div>
+
+    <p class="privacy">Your location is only used on your device to sort distances. It is never stored or sent anywhere.</p>
+  </section>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="config.js"></script>
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
