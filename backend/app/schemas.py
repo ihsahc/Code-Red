@@ -22,6 +22,7 @@ class DispenserOut(BaseModel):
     building: BuildingOut
     floor: str
     location_note: str
+    real: bool = Field(description="True for the physical dispenser, false for simulated ones")
     status: Status
     fill_percent: float | None = Field(description="0–100, or null if no reading yet")
     units_left: int | None = Field(description="Rough count of products left")

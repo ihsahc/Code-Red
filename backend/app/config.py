@@ -43,6 +43,20 @@ EMPTY_DISTANCE_MM = _get_float("EMPTY_DISTANCE_MM", 400)
 # Thickness of one wrapped tampon lying flat, in millimetres.
 PRODUCT_THICKNESS_MM = _get_float("PRODUCT_THICKNESS_MM", 18)
 
+# --- The one real dispenser -------------------------------------------------
+# Every other dispenser is simulated and uses the defaults above. The real
+# box is 15.5 cm tall, so it has its own calibration. Change these on Render
+# (code-red-api -> Environment) once you've measured it; no code change needed.
+REAL_DISPENSER_ID = os.getenv("REAL_DISPENSER_ID", "klaus-atrium-pico-w")
+# Sensor reading with the box EMPTY (roughly the 155 mm box height).
+REAL_EMPTY_DISTANCE_MM = _get_float("REAL_EMPTY_DISTANCE_MM", 155)
+# Sensor reading with the box FULL. The VL53L0X is unreliable under ~30 mm,
+# so keep the top of a full stack at least 3-4 cm below the sensor.
+REAL_FULL_DISTANCE_MM = _get_float("REAL_FULL_DISTANCE_MM", 40)
+# Secret key the Pico W sends with each reading. Set it on Render only;
+# never commit it. If unset, the box keeps its guessable demo key.
+REAL_DEVICE_KEY = os.getenv("REAL_DEVICE_KEY", "").strip()
+
 # --- Status rules ---------------------------------------------------------
 # Above this fill percentage a dispenser counts as "full".
 FULL_ABOVE_PERCENT = _get_float("FULL_ABOVE_PERCENT", 50)

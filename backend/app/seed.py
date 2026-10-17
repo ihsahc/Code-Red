@@ -16,6 +16,7 @@ from datetime import timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import config
 from app.database import Base, SessionLocal, engine
 from app.models import Building, Dispenser
 from app.services import record_reading
@@ -25,7 +26,15 @@ DISPENSERS = [
     # id, building, floor, location note, lat, lng, starting distance (None = offline)
     ("p264591", "Clough Undergraduate Learning Commons", "Floor 1", "Women's restroom", 33.774868, -84.396400, 92),
     ("p264520", "Gilbert Memorial Library", "Floor 1", "Women's restroom", 33.774426, -84.395790, 148),
-    ("klaus-atrium-pico-w", "Klaus Advanced Computing Building", "Atrium", "Women's restroom in the Klaus atrium", 33.777524, -84.396128, 208),
+    (
+        "klaus-atrium-pico-w",
+        "Klaus Advanced Computing Building",
+        "Atrium",
+        "Women's restroom in the Klaus atrium",
+        33.777524,
+        -84.396128,
+        208,
+    ),
     ("p279898", "Stamps Health Services", "Floor 1", "Women's restroom", 33.774773, -84.402885, 260),
     ("p473312", "Kendeda Building", "Floor 2", "Women's restroom", 33.778774, -84.399574, 323),
     ("p264141", "Skiles", "Floor 1", "Women's restroom", 33.773582, -84.395950, 358),
@@ -65,6 +74,10 @@ def seed(db: Session) -> None:
         db.add(d)
         db.flush()
         d.building = buildings[building]
+        if dispenser_id == config.REAL_DISPENSER_ID:
+            # The real box gets no fake history: it shows as offline until
+            # the Pico W sends its first reading.
+            continue
         if distance is None:
             # Last heard from three hours ago, so it shows as offline.
             record_reading(db, d, 150, None, at=now - timedelta(hours=3))

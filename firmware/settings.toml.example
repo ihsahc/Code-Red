@@ -1,0 +1,22 @@
+# Copy this file to the CIRCUITPY drive as "settings.toml" and fill it in.
+# Never commit the real settings.toml: it holds your Wi-Fi password and device key.
+
+# Wi-Fi. CircuitPython connects automatically using these two names.
+# Use a phone hotspot or a network without a login page (not eduroam).
+# The Pico W only supports 2.4 GHz Wi-Fi: on an iPhone hotspot, turn on
+# "Maximize Compatibility".
+CIRCUITPY_WIFI_SSID = "your-network-name"
+CIRCUITPY_WIFI_PASSWORD = "your-network-password"
+
+# Where to send readings, and which dispenser this is.
+API_URL = "https://code-red-api.onrender.com"
+DISPENSER_ID = "klaus-atrium-pico-w"
+
+# Must match REAL_DEVICE_KEY in Render (code-red-api -> Environment).
+DEVICE_KEY = "paste-the-same-secret-key-here"
+
+# Seconds between readings. Keep it under 2 minutes, or the map shows "offline".
+REPORT_EVERY_SECONDS = 5
+
+# 1 = only print distances (for measuring empty/full), 0 = report to the website.
+CALIBRATE = 0

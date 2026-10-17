@@ -143,3 +143,92 @@ def test_nearest_skips_empty_and_offline(client):
 def test_status_filter(client):
     send(client, "near", FULL_MM, "k1")
     assert [d["id"] for d in client.get("/dispensers?status=full").json()] == ["near"]
+
+
+# --- The real dispenser ------------------------------------------------------
+
+
+def make_db():
+    engine = database.create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(engine)
+    return engine, database.sessionmaker(bind=engine, expire_on_commit=False)
+
+
+def test_fill_percent_with_own_calibration():
+    # The real box: 155 mm when empty, 40 mm when full.
+    assert fill_percent(155, 155, 40) == 0
+    assert fill_percent(40, 155, 40) == 100
+    assert fill_percent(97.5, 155, 40) == 50
+    # Simulated dispensers still use the defaults.
+    assert fill_percent(225) == 50
+
+
+def test_sync_real_dispenser_sets_calibration_and_key(monkeypatch):
+    from app import config
+    from app.services import sync_real_dispenser
+
+    monkeypatch.setattr(config, "REAL_DISPENSER_ID", "pico")
+    monkeypatch.setattr(config, "REAL_EMPTY_DISTANCE_MM", 155)
+    monkeypatch.setattr(config, "REAL_FULL_DISTANCE_MM", 40)
+    monkeypatch.setattr(config, "REAL_DEVICE_KEY", "s3cret")
+    _, Session = make_db()
+    with Session() as db:
+        db.add(Building(id=1, name="Klaus", lat=33.7771, lng=-84.3962))
+        db.add(Dispenser(id="pico", building_id=1, floor="1", location_note="", device_key="demo-pico"))
+        db.add(Dispenser(id="fake", building_id=1, floor="1", location_note="", device_key="demo-fake"))
+        db.commit()
+        assert "secret key" in sync_real_dispenser(db)
+        pico, fake = db.get(Dispenser, "pico"), db.get(Dispenser, "fake")
+        assert pico.is_real and pico.device_key == "s3cret"
+        assert (pico.empty_distance_mm, pico.full_distance_mm) == (155, 40)
+        assert not fake.is_real and fake.empty_distance_mm is None
+
+
+def test_sync_warns_without_key(monkeypatch):
+    from app import config
+    from app.services import sync_real_dispenser
+
+    monkeypatch.setattr(config, "REAL_DISPENSER_ID", "pico")
+    monkeypatch.setattr(config, "REAL_DEVICE_KEY", "")
+    _, Session = make_db()
+    with Session() as db:
+        db.add(Building(id=1, name="Klaus", lat=33.7771, lng=-84.3962))
+        db.add(Dispenser(id="pico", building_id=1, floor="1", location_note="", device_key="demo-pico"))
+        db.commit()
+        assert "WARNING" in sync_real_dispenser(db)
+        assert db.get(Dispenser, "pico").device_key == "demo-pico"
+
+
+def test_real_dispenser_reading_uses_its_calibration(client):
+    with next(app.dependency_overrides[get_db]()) as db:
+        d = db.get(Dispenser, "near")
+        d.is_real, d.empty_distance_mm, d.full_distance_mm = True, 155, 40
+        db.commit()
+    r = send(client, "near", 97.5, "k1").json()
+    assert r["fill_percent"] == 50 and r["status"] == "low"
+    out = client.get("/dispensers/near").json()
+    assert out["real"] is True and out["units_left"] == 3  # 50% of (155-40)/18 ≈ 3
+    assert client.get("/dispensers/far").json()["real"] is False
+
+
+def test_add_missing_columns_upgrades_old_database():
+    from app.database import add_missing_columns
+    from sqlalchemy import inspect as sa_inspect
+    from sqlalchemy import text
+
+    engine = database.create_engine("sqlite://", poolclass=StaticPool)
+    with engine.begin() as conn:  # a dispensers table from before the new columns existed
+        conn.execute(
+            text(
+                "CREATE TABLE dispensers (id VARCHAR(64) PRIMARY KEY, building_id INTEGER, floor VARCHAR(20),"
+                " location_note VARCHAR(200), device_key VARCHAR(64))"
+            )
+        )
+        conn.execute(text("INSERT INTO dispensers VALUES ('x', 1, '1', '', 'k')"))
+    added = add_missing_columns(engine)
+    assert "dispensers.is_real" in added and "dispensers.empty_distance_mm" in added
+    cols = {c["name"] for c in sa_inspect(engine).get_columns("dispensers")}
+    assert {"is_real", "empty_distance_mm", "full_distance_mm", "last_fill_percent"} <= cols
+    assert add_missing_columns(engine) == []  # running again changes nothing
+    with engine.connect() as conn:
+        assert conn.execute(text("SELECT id FROM dispensers")).scalar() == "x"  # data kept

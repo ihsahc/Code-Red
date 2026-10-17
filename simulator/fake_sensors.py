@@ -57,8 +57,17 @@ def main() -> None:
     client = httpx.Client(timeout=90)  # a sleeping Render app can take ~1 minute to wake up
 
     dispensers = client.get(f"{base}/dispensers").raise_for_status().json()
-    units = {d["id"]: units_from_fill(d["fill_percent"]) for d in dispensers if d["id"] not in args.skip}
-    print(f"Simulating {len(units)} dispensers against {base}. Ctrl+C to stop.\n")
+    # Never fake readings for the real dispenser: its data comes from the Pico W.
+    real = [d["id"] for d in dispensers if d.get("real")]
+    units = {
+        d["id"]: units_from_fill(d["fill_percent"])
+        for d in dispensers
+        if d["id"] not in args.skip and not d.get("real")
+    }
+    print(f"Simulating {len(units)} dispensers against {base}. Ctrl+C to stop.")
+    if real:
+        print(f"Leaving the real dispenser alone: {', '.join(real)}")
+    print()
 
     max_taken = 3 if args.busy else 1
     take_chance = 0.6 if args.busy else 0.3

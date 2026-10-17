@@ -35,6 +35,11 @@ class Dispenser(Base):
     location_note: Mapped[str] = mapped_column(String(200), default="")
     # Secret the device sends with each reading, so nobody else can fake one.
     device_key: Mapped[str] = mapped_column(String(64))
+    # True for the physical dispenser; False/None for simulated ones.
+    is_real: Mapped[bool | None] = mapped_column(nullable=True)
+    # Per-dispenser calibration. When empty, the defaults in config.py apply.
+    empty_distance_mm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    full_distance_mm: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     # Latest values, copied from the newest reading so lists load quickly.
     last_distance_mm: Mapped[float | None] = mapped_column(Float, nullable=True)

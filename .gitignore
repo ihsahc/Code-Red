@@ -27,3 +27,6 @@ Thumbs.db
 # Arduino / PlatformIO
 .pio/
 firmware/**/secrets.h
+
+# CircuitPython settings (Wi-Fi password and device key)
+settings.toml

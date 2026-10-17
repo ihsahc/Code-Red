@@ -21,9 +21,10 @@ def dispenser_out(d: Dispenser, now=None) -> DispenserOut:
         building=BuildingOut(id=d.building.id, name=d.building.name, lat=d.building.lat, lng=d.building.lng),
         floor=d.floor,
         location_note=d.location_note,
+        real=bool(d.is_real),
         status=current_status(pct, d.last_reading_at, now),
         fill_percent=pct,
-        units_left=units_left(pct) if pct is not None else None,
+        units_left=units_left(pct, d.empty_distance_mm, d.full_distance_mm) if pct is not None else None,
         last_reading_at=to_utc(d.last_reading_at),
         last_refill_at=to_utc(d.last_refill_at),
     )
@@ -49,7 +50,7 @@ def record_reading(
 ) -> tuple[float, Status]:
     """Save a reading, update the dispenser, and raise or resolve alerts."""
     at = at or utcnow()
-    new_pct = fill_percent(distance_mm)
+    new_pct = fill_percent(distance_mm, d.empty_distance_mm, d.full_distance_mm)
     new_status = status_from_percent(new_pct)
     old_pct = d.last_fill_percent
 
@@ -86,6 +87,27 @@ def record_reading(
     d.last_reading_at = at
     db.commit()
     return new_pct, new_status
+
+
+def sync_real_dispenser(db: Session) -> str:
+    """Apply the real dispenser's settings from config (runs at every startup).
+
+    Marks it as real, sets its calibration, and gives it the secret key from
+    REAL_DEVICE_KEY. Returns a short message for the server log.
+    """
+    d = db.get(Dispenser, config.REAL_DISPENSER_ID)
+    if d is None:
+        return f"Real dispenser '{config.REAL_DISPENSER_ID}' not in the database; nothing to set up."
+    d.is_real = True
+    d.empty_distance_mm = config.REAL_EMPTY_DISTANCE_MM
+    d.full_distance_mm = config.REAL_FULL_DISTANCE_MM
+    if config.REAL_DEVICE_KEY:
+        d.device_key = config.REAL_DEVICE_KEY
+        key_note = "secret key from REAL_DEVICE_KEY"
+    else:
+        key_note = f"WARNING: REAL_DEVICE_KEY not set, still using '{d.device_key}'"
+    db.commit()
+    return f"Real dispenser '{d.id}': empty={d.empty_distance_mm:g} mm, full={d.full_distance_mm:g} mm, {key_note}."
 
 
 def distance_m(lat1: float, lng1: float, lat2: float, lng2: float) -> float:

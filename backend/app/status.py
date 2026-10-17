@@ -21,21 +21,24 @@ class Status(StrEnum):
 URGENCY = {Status.EMPTY: 0, Status.OFFLINE: 1, Status.LOW: 2, Status.FULL: 3}
 
 
-def fill_percent(distance_mm: float) -> float:
+def fill_percent(distance_mm: float, empty_mm: float | None = None, full_mm: float | None = None) -> float:
     """Convert sensor distance to a fill percentage between 0 and 100.
 
     A full stack sits close to the sensor (small distance); an empty column
-    leaves the sensor looking all the way down (large distance).
+    leaves the sensor looking all the way down (large distance). Pass a
+    dispenser's own calibration, or leave it out to use the defaults.
     """
-    span = config.EMPTY_DISTANCE_MM - config.FULL_DISTANCE_MM
-    percent = (config.EMPTY_DISTANCE_MM - distance_mm) / span * 100
+    empty = empty_mm if empty_mm is not None else config.EMPTY_DISTANCE_MM
+    full = full_mm if full_mm is not None else config.FULL_DISTANCE_MM
+    percent = (empty - distance_mm) / (empty - full) * 100
     return round(max(0.0, min(100.0, percent)), 1)
 
 
-def units_left(percent: float) -> int:
+def units_left(percent: float, empty_mm: float | None = None, full_mm: float | None = None) -> int:
     """Rough number of products left, for display ("about 7 left")."""
-    span = config.EMPTY_DISTANCE_MM - config.FULL_DISTANCE_MM
-    return round(percent / 100 * span / config.PRODUCT_THICKNESS_MM)
+    empty = empty_mm if empty_mm is not None else config.EMPTY_DISTANCE_MM
+    full = full_mm if full_mm is not None else config.FULL_DISTANCE_MM
+    return round(percent / 100 * (empty - full) / config.PRODUCT_THICKNESS_MM)
 
 
 def status_from_percent(percent: float) -> Status:

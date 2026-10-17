@@ -42,6 +42,16 @@ services:
         value: "2"
       - key: REFILL_JUMP_PERCENT
         value: "30"
+      # The one real dispenser (Pico W): its own calibration, measured with
+      # CALIBRATE = 1 on the device. Placeholders until then.
+      - key: REAL_EMPTY_DISTANCE_MM
+        value: "155"
+      - key: REAL_FULL_DISTANCE_MM
+        value: "40"
+      # Secret key the Pico sends. Set the value in the Render dashboard;
+      # "sync: false" keeps it out of this file.
+      - key: REAL_DEVICE_KEY
+        sync: false
 
 databases:
   - name: code-red-db

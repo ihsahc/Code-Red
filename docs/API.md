@@ -44,13 +44,18 @@ Most endpoints return this shape:
   },
   "floor": "1",
   "location_note": "Women's restroom off the atrium",
+  "real": true,
   "status": "low",
   "fill_percent": 27.8,
-  "units_left": 6,
+  "units_left": 2,
   "last_reading_at": "2026-10-17T16:38:12Z",
   "last_refill_at": null
 }
 ```
+
+`real` is `true` only for the physical dispenser (the Pico W); every other
+dispenser is simulated. The frontend can use it for the "Live dispenser" badge
+instead of hard-coding the ID.
 
 Several dispensers can share a building (and so the same coordinates). On the
 map, group them into one pin per building and list the dispensers by floor
