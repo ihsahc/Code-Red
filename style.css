@@ -182,3 +182,11 @@ button.primary:disabled { opacity: 0.6; cursor: wait; }
 
 /* Remove Leaflet's default white box around our custom pins */
 .leaflet-div-icon { background: transparent; border: 0; }
+
+/* Floor-by-floor list inside a building popup */
+.floor-list { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; }
+.floor-row { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; }
+.floor-row .dot { width: 18px; height: 18px; font-size: 11px; flex: none; }
+.floor-row .floor-name { flex: 1; }
+.floor-row .floor-pct { color: var(--muted); white-space: nowrap; }
+.popup .hint { color: var(--muted); font-size: 0.75rem; }

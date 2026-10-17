@@ -37,7 +37,11 @@
         <strong>Urgent refills</strong>
         <button id="student-btn" class="text-button" type="button">Student View</button>
       </div>
-      <p class="staff-help">Empty dispensers first, then ones running low.</p>
+      <p class="staff-help">Empty dispensers only.</p>
+      <div class="sort-toggle" role="group" aria-label="Sort urgent refills">
+        <button id="sort-longest" class="sort-button active" type="button">Longest empty</button>
+        <button id="sort-closest" class="sort-button" type="button">Closest to me</button>
+      </div>
       <div id="urgent-list" class="urgent-list" aria-live="polite"></div>
     </section>
 
@@ -48,6 +52,7 @@
     </div>
 
     <div id="result" class="result" role="status" aria-live="polite" hidden></div>
+    <button id="clear-result" class="clear-result" type="button" hidden>Clear nearest result</button>
 
     <p class="privacy">Your location is only used on your device to sort distances. It is never stored or sent anywhere.</p>
   </section>

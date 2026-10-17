@@ -23,6 +23,11 @@ const CONFIG = {
   MAP_CENTER: [33.7756, -84.3985],
   MAP_ZOOM: 16,
 
+  // Keep people on campus: the map can't zoom out past MAP_MIN_ZOOM or be
+  // dragged outside MAP_BOUNDS ([south-west corner], [north-east corner]).
+  MAP_MIN_ZOOM: 15,
+  MAP_BOUNDS: [[33.7660, -84.4130], [33.7870, -84.3830]],
+
   // Poll the live API and refresh local demo fallback data every 5 seconds.
   POLL_INTERVAL_MS: 5000,
 
