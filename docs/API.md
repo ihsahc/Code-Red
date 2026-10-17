@@ -4,7 +4,7 @@ This is the contract between the backend and the frontend. If you change an
 endpoint, update this file in the same commit and tell the other person.
 
 - **Local base URL:** `http://localhost:8000`
-- **Deployed base URL:** `https://<your-app>.onrender.com` (fill in after deploying)
+- **Deployed base URL:** `https://code-red-api.onrender.com`
 - **Interactive docs:** open `/docs` on either URL to try every endpoint in the browser.
 
 All responses are JSON. All times are UTC in ISO 8601 format, ending in `Z`
