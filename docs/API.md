@@ -120,7 +120,9 @@ switches which screens are shown.
 ### `GET /staff/restock`
 
 Empty dispensers only, longest empty first. Offline and low dispensers stay on
-the map but do not appear in the urgent list. Returns Dispenser objects.
+the map but do not appear in the urgent list. The website can instead sort the
+same empty list by distance using the user's location in the browser; it does
+not send or store that location. Returns Dispenser objects.
 
 ### `GET /staff/alerts`
 
