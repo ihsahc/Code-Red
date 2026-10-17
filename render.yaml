@@ -1,6 +1,17 @@
-# Render Blueprint: creates the API and a free Postgres database.
+# Render Blueprint: creates the website, the API, and a free Postgres database.
 # On render.com: New → Blueprint → pick this repo.
 services:
+  # The website (index.html, app.js, ...). Only the frontend files are
+  # published, so backend code and docs aren't served to visitors.
+  - type: web
+    name: code-red
+    runtime: static
+    buildCommand: >-
+      mkdir -p dist && cp *.html *.js *.css dist/ &&
+      if [ -d assets ]; then cp -r assets dist/; fi
+    staticPublishPath: dist
+
+  # The backend API.
   - type: web
     name: code-red-api
     runtime: python
