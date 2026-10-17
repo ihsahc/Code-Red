@@ -34,9 +34,20 @@ function locationFallback() { $("fallback").hidden = false; result("<strong>Loca
 
 async function urgent() {
   if (!staffMode) return;
-  let empty = [];
-  try { if (!usingFallback) { const r = await fetch(`${apiBase}/staff/alerts`); if (!r.ok) throw Error(); empty = (await r.json()).filter((a) => a.level === "empty").sort((a, b) => new Date(a.created_at) - new Date(b.created_at)).map((a) => ({ building: a.building_name, floor: a.floor, fill: a.fill_percent, since: a.created_at })); } else throw Error(); } catch { empty = dispensers.filter((d) => d.status === "empty").map((d) => ({ building: d.building.name, floor: d.floor, fill: d.fill_percent, since: d.last_reading_at })); }
-  $("urgent-list").innerHTML = empty.length ? empty.map((d) => `<div class="urgent-item"><strong>${escapeHtml(d.building)}</strong><span>${escapeHtml(d.floor)} · ${Math.round(d.fill)}% full · empty ${timeAgo(d.since)}</span></div>`).join("") : "<p>Nothing is empty right now.</p>";
+  // Empty dispensers first, then ones running low; oldest alert first within each group.
+  let items = [];
+  const rank = { empty: 0, low: 1 };
+  try {
+    if (usingFallback) throw Error();
+    const r = await fetch(`${apiBase}/staff/alerts`); if (!r.ok) throw Error();
+    // Show each dispenser's current fill, not the fill when the alert was raised.
+    const current = Object.fromEntries(dispensers.map((d) => [d.id, d.fill_percent]));
+    items = (await r.json()).map((a) => ({ level: a.level, building: a.building_name, floor: a.floor, fill: current[a.dispenser_id] ?? a.fill_percent, since: a.created_at }));
+  } catch {
+    items = dispensers.filter((d) => d.status === "empty" || d.status === "low").map((d) => ({ level: d.status, building: d.building.name, floor: d.floor, fill: d.fill_percent, since: d.last_reading_at }));
+  }
+  items = items.filter((d) => d.level in rank).sort((a, b) => rank[a.level] - rank[b.level] || new Date(a.since) - new Date(b.since));
+  $("urgent-list").innerHTML = items.length ? items.map((d) => `<div class="urgent-item ${d.level}"><strong>${escapeHtml(d.building)}</strong><span>${d.level === "empty" ? "Empty" : "Running low"} · ${escapeHtml(d.floor)} · ${Math.round(d.fill)}% full · since ${timeAgo(d.since)}</span></div>`).join("") : "<p>Everything is stocked right now.</p>";
 }
 async function load() { try { const r = await fetch(`${apiBase}/dispensers`); if (!r.ok) throw Error(); dispensers = (await r.json()).map(normalize); usingFallback = false; $("data-source").textContent = "Live data"; } catch { dispensers = fallbackData(); usingFallback = true; $("data-source").textContent = "Demo fallback"; } render(); fillBuildings(); urgent(); }
 
