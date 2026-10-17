@@ -15,7 +15,7 @@ from fastapi.responses import RedirectResponse
 from app import config
 from app.database import Base, SessionLocal, add_missing_columns, engine
 from app.routers import dispensers, readings, staff
-from app.seed import seed_if_empty
+from app.seed import sync_demo_data
 from app.services import sync_real_dispenser
 
 log = logging.getLogger("uvicorn.error")
@@ -30,7 +30,9 @@ async def lifespan(app: FastAPI):
     for added in add_missing_columns(engine):
         log.info("Added database column %s", added)
     if config.SEED_DEMO_DATA:
-        seed_if_empty()
+        with SessionLocal() as db:
+            result = sync_demo_data(db)
+        log.info("Demo data synced: %(total)d dispensers (%(added)d added, %(removed)d removed)", result)
     with SessionLocal() as db:
         log.info(sync_real_dispenser(db))
     yield

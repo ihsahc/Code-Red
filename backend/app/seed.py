@@ -1,7 +1,10 @@
 """Demo data: 71 dispensers across 19 campus buildings (one per floor), in a mix of states.
 
-Runs automatically on startup when the database is empty (SEED_DEMO_DATA=true).
-To wipe and re-seed locally:   python -m app.seed --reset
+On every startup (with SEED_DEMO_DATA=true) the database is updated to match
+the DISPENSERS list below, so to add, remove or move a dispenser on the live
+site, edit the list and push. Keep it in sync with data.js (the website's
+offline fallback); tests/test_api.py checks that the two match.
+To wipe everything and start over locally:   python -m app.seed --reset
 
 The coordinates are APPROXIMATE building locations, good enough for a demo
 map. Check them on a real map before relying on them.
@@ -13,11 +16,12 @@ can report for every dispenser. Give real devices random keys instead.
 import argparse
 from datetime import timedelta
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
+from app import config
 from app.database import Base, SessionLocal, engine
-from app.models import Building, Dispenser
+from app.models import Alert, Building, Dispenser, Reading
 from app.services import record_reading
 from app.timeutil import utcnow
 
@@ -99,16 +103,58 @@ DISPENSERS = [
 ]
 
 
-def seed(db: Session) -> None:
-    buildings = {}
+def _add_starting_readings(db: Session, d: Dispenser, distance: float | None) -> None:
+    if d.id == config.REAL_DISPENSER_ID:
+        # The real box gets no fake history: it shows as offline until
+        # the Pico W sends its first reading.
+        return
+    now = utcnow()
+    if distance is None:
+        # Last heard from three hours ago, so it shows as offline.
+        record_reading(db, d, 150, None, at=now - timedelta(hours=3))
+    else:
+        # Start full an hour ago, then move to its current level,
+        # so alerts and history look realistic.
+        record_reading(db, d, 50, 3.9, at=now - timedelta(hours=1))
+        record_reading(db, d, distance, 3.8, at=now - timedelta(seconds=30))
+
+
+def sync_demo_data(db: Session) -> dict[str, int]:
+    """Make the database's buildings and dispensers match DISPENSERS above.
+
+    Runs on every startup, so editing the list and pushing is all it takes:
+    - dispensers in the list but not the database are added, with starting levels
+    - dispensers in both keep their readings; name, floor and location are updated
+    - dispensers no longer in the list are removed with their readings and alerts
+      (never the real one)
+    """
+    wanted_ids = {row[0] for row in DISPENSERS}
+
+    buildings = {b.name: b for b in db.scalars(select(Building))}
     for _, name, _, _, lat, lng, _ in DISPENSERS:
-        if name not in buildings:
+        if name in buildings:
+            buildings[name].lat, buildings[name].lng = lat, lng
+        else:
             buildings[name] = Building(name=name, lat=lat, lng=lng)
             db.add(buildings[name])
     db.flush()
 
-    now = utcnow()
+    existing = {d.id: d for d in db.scalars(select(Dispenser))}
+    removed = 0
+    for dispenser_id, d in existing.items():
+        if dispenser_id not in wanted_ids and not d.is_real:
+            db.execute(delete(Alert).where(Alert.dispenser_id == dispenser_id))
+            db.execute(delete(Reading).where(Reading.dispenser_id == dispenser_id))
+            db.delete(d)
+            removed += 1
+    db.flush()
+
+    added = 0
     for dispenser_id, building, floor, note, _, _, distance in DISPENSERS:
+        d = existing.get(dispenser_id)
+        if d is not None:
+            d.building_id, d.floor, d.location_note = buildings[building].id, floor, note
+            continue
         d = Dispenser(
             id=dispenser_id,
             building_id=buildings[building].id,
@@ -118,16 +164,22 @@ def seed(db: Session) -> None:
         )
         db.add(d)
         db.flush()
-        d.building = buildings[building]
-        if distance is None:
-            # Last heard from three hours ago, so it shows as offline.
-            record_reading(db, d, 150, None, at=now - timedelta(hours=3))
-        else:
-            # Start every dispenser full an hour ago, then move to its current level,
-            # so alerts and history look realistic.
-            record_reading(db, d, 50, 3.9, at=now - timedelta(hours=1))
-            record_reading(db, d, distance, 3.8, at=now - timedelta(seconds=30))
+        _add_starting_readings(db, d, distance)
+        added += 1
+    db.flush()
+
+    # Remove buildings that no longer have any dispensers.
+    in_use = set(db.scalars(select(Dispenser.building_id)))
+    for b in buildings.values():
+        if b.id not in in_use:
+            db.delete(b)
     db.commit()
+    return {"added": added, "removed": removed, "total": len(wanted_ids)}
+
+
+def seed(db: Session) -> None:
+    """Fill an empty database (kept for --reset and older callers)."""
+    sync_demo_data(db)
 
 
 def seed_if_empty() -> bool:

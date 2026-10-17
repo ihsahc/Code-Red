@@ -232,3 +232,96 @@ def test_add_missing_columns_upgrades_old_database():
     assert add_missing_columns(engine) == []  # running again changes nothing
     with engine.connect() as conn:
         assert conn.execute(text("SELECT id FROM dispensers")).scalar() == "x"  # data kept
+
+
+# --- Demo data sync ----------------------------------------------------------
+
+
+def test_sync_demo_data_adds_updates_and_removes(monkeypatch):
+    from app import seed as seed_mod
+    from app.models import Alert, Reading
+
+    monkeypatch.setattr(config_module(), "REAL_DISPENSER_ID", "pico")
+    rows = [
+        ("a", "Klaus", "Floor 1", "Women's restroom", 33.7771, -84.3962, 225),
+        ("b", "Klaus", "Floor 2", "Women's restroom", 33.7771, -84.3962, 400),
+        ("pico", "Klaus", "Atrium", "Real box", 33.7771, -84.3962, 100),
+    ]
+    monkeypatch.setattr(seed_mod, "DISPENSERS", rows)
+    _, Session = make_db()
+    with Session() as db:
+        assert seed_mod.sync_demo_data(db) == {"added": 3, "removed": 0, "total": 3}
+        assert db.get(Dispenser, "pico").last_reading_at is None  # real box: no fake history
+        level_a = db.get(Dispenser, "a").last_fill_percent
+
+        # An old dispenser that's no longer listed, with readings and an alert.
+        db.add(Building(name="Old", lat=1, lng=1))
+        db.flush()
+        old_b = db.scalar(select_building("Old"))
+        db.add(Dispenser(id="old", building_id=old_b.id, floor="1", location_note="", device_key="k"))
+        db.flush()
+        from app.services import record_reading
+
+        record_reading(db, db.get(Dispenser, "old"), 400, None)
+
+        # Rename a floor and drop "b" from the list; run again.
+        monkeypatch.setattr(
+            seed_mod, "DISPENSERS", [("a", "Klaus", "Ground", "Renamed", 33.7771, -84.3962, 225), rows[2]]
+        )
+        assert seed_mod.sync_demo_data(db) == {"added": 0, "removed": 2, "total": 2}
+        a = db.get(Dispenser, "a")
+        assert (a.floor, a.location_note, a.last_fill_percent) == ("Ground", "Renamed", level_a)  # readings kept
+        assert db.get(Dispenser, "b") is None and db.get(Dispenser, "old") is None
+        assert db.scalar(select_building("Old")) is None  # empty building removed
+        assert not db.query(Reading).filter_by(dispenser_id="old").count()
+        assert not db.query(Alert).filter_by(dispenser_id="old").count()
+
+        # Running again with no changes does nothing.
+        assert seed_mod.sync_demo_data(db) == {"added": 0, "removed": 0, "total": 2}
+
+
+def test_sync_never_removes_the_real_dispenser(monkeypatch):
+    from app import seed as seed_mod
+
+    monkeypatch.setattr(seed_mod, "DISPENSERS", [("a", "Klaus", "1", "", 33.7, -84.3, 225)])
+    _, Session = make_db()
+    with Session() as db:
+        db.add(Building(id=9, name="Elsewhere", lat=1, lng=1))
+        db.add(Dispenser(id="pico", building_id=9, floor="1", location_note="", device_key="k", is_real=True))
+        db.commit()
+        assert seed_mod.sync_demo_data(db)["removed"] == 0
+        assert db.get(Dispenser, "pico") is not None
+
+
+def test_backend_seed_matches_website_fallback_data():
+    """seed.py (live data) and data.js (website fallback) must list the same dispensers."""
+    import pathlib
+    import re
+
+    from app.seed import DISPENSERS
+
+    data_js = (pathlib.Path(__file__).resolve().parents[2] / "data.js").read_text()
+    pattern = r'id:\s*"([^"]+)",\s*building:\s*"([^"]+)",\s*floor:\s*"([^"]+)",\s*lat:\s*([-\d.]+),\s*lng:\s*([-\d.]+)'
+    website = {m[0]: (m[1], m[2], float(m[3]), float(m[4])) for m in re.findall(pattern, data_js)}
+    backend = {r[0]: (r[1], r[2], r[4], r[5]) for r in DISPENSERS}
+    assert set(website) == set(backend), (
+        f"Only on website: {set(website) - set(backend)}; only in backend: {set(backend) - set(website)}"
+    )
+    for dispenser_id, (building, floor, lat, lng) in backend.items():
+        w = website[dispenser_id]
+        assert (w[0], w[1]) == (building, floor), (
+            f"{dispenser_id}: website has {w[:2]}, backend has {(building, floor)}"
+        )
+        assert abs(w[2] - lat) < 1e-6 and abs(w[3] - lng) < 1e-6, f"{dispenser_id}: coordinates differ"
+
+
+def config_module():
+    from app import config
+
+    return config
+
+
+def select_building(name):
+    from sqlalchemy import select
+
+    return select(Building).where(Building.name == name)
