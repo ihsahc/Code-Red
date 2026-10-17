@@ -16,7 +16,6 @@ from datetime import timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import config
 from app.database import Base, SessionLocal, engine
 from app.models import Building, Dispenser
 from app.services import record_reading
@@ -32,17 +31,6 @@ DISPENSERS = [
     ("p264591-f4", "Clough Undergraduate Learning Commons", "Floor 4", "Women's restroom", 33.774868, -84.396400, 358),
     ("p264591-f5", "Clough Undergraduate Learning Commons", "Floor 5", "Women's restroom", 33.774868, -84.396400, 141),
     ("p264520", "Gilbert Memorial Library", "Floor 1", "Women's restroom", 33.774426, -84.395790, 148),
-<<<<<<< HEAD
-    (
-        "klaus-atrium-pico-w",
-        "Klaus Advanced Computing Building",
-        "Atrium",
-        "Women's restroom in the Klaus atrium",
-        33.777524,
-        -84.396128,
-        208,
-    ),
-=======
     ("p264520-f2", "Gilbert Memorial Library", "Floor 2", "Women's restroom", 33.774426, -84.395790, 232),
     ("p264520-f3", "Gilbert Memorial Library", "Floor 3", "Women's restroom", 33.774426, -84.395790, 330),
     ("p264520-f4", "Gilbert Memorial Library", "Floor 4", "Women's restroom", 33.774426, -84.395790, 368),
@@ -52,7 +40,6 @@ DISPENSERS = [
     ("klaus-f3", "Klaus Advanced Computing Building", "Floor 3", "Women's restroom", 33.777524, -84.396128, 351),
     ("klaus-f4", "Klaus Advanced Computing Building", "Floor 4", "Women's restroom", 33.777524, -84.396128, 400),
     ("klaus-f5", "Klaus Advanced Computing Building", "Floor 5", "Women's restroom", 33.777524, -84.396128, 169),
->>>>>>> ui-changes
     ("p279898", "Stamps Health Services", "Floor 1", "Women's restroom", 33.774773, -84.402885, 260),
     ("p279898-f2", "Stamps Health Services", "Floor 2", "Women's restroom", 33.774773, -84.402885, 337),
     ("p473312-f1", "Kendeda Building", "Floor 1", "Women's restroom", 33.778774, -84.399574, 368),
@@ -132,10 +119,6 @@ def seed(db: Session) -> None:
         db.add(d)
         db.flush()
         d.building = buildings[building]
-        if dispenser_id == config.REAL_DISPENSER_ID:
-            # The real box gets no fake history: it shows as offline until
-            # the Pico W sends its first reading.
-            continue
         if distance is None:
             # Last heard from three hours ago, so it shows as offline.
             record_reading(db, d, 150, None, at=now - timedelta(hours=3))
