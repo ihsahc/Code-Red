@@ -20,10 +20,12 @@ def _get_bool(name: str, default: bool) -> bool:
 
 def _database_url() -> str:
     url = os.getenv("DATABASE_URL", "sqlite:///./dispensers.db")
-    # Render hands out URLs starting with "postgres://", but SQLAlchemy
-    # only accepts "postgresql://".
-    if url.startswith("postgres://"):
-        url = url.replace("postgres://", "postgresql://", 1)
+    # Render hands out URLs starting with "postgres://" or "postgresql://".
+    # Name the driver explicitly ("+psycopg", i.e. psycopg 3) so SQLAlchemy
+    # doesn't guess, since its default driver has changed between versions.
+    for prefix in ("postgres://", "postgresql://"):
+        if url.startswith(prefix):
+            url = "postgresql+psycopg://" + url[len(prefix) :]
     return url
 
 
