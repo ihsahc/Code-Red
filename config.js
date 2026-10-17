@@ -1,9 +1,11 @@
 // config.js — settings you might want to tweak. Change a value here, refresh the page, done.
 
 const CONFIG = {
-  // Backend URL. Leave this as localhost while developing; replace it with
-  // your Render API URL before publishing this site to GitHub Pages.
-  API_BASE_URL: "http://localhost:8001",
+  // Backend URL. Picked automatically: the local backend when the page is
+  // opened on localhost, the live Render backend everywhere else.
+  API_BASE_URL: ["localhost", "127.0.0.1"].includes(location.hostname)
+    ? "http://localhost:8001"
+    : "https://code-red-api.onrender.com",
 
   // The one physical Pico W dispenser. All other seeded devices are clearly
   // labelled as demo data in the map popup.
