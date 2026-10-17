@@ -61,10 +61,6 @@ button.view-tag { border: 0; color: inherit; cursor: pointer; font-family: inher
 
 #map { flex: 1; min-height: 0; }
 
-/* Staff mode keeps the map and refill panel stable while the list changes. */
-body.staff-active #map { flex: 0 0 50%; }
-body.staff-active .panel { flex: 0 0 50%; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
-
 .panel {
   padding: 10px 14px 14px;
   background: var(--panel-bg);
@@ -151,7 +147,6 @@ button.primary:disabled { opacity: 0.6; cursor: wait; }
 .result.warn { border-left-color: var(--red); }
 .result strong { display: block; }
 .result span { color: var(--muted); font-size: 0.85rem; }
-.clear-result { width: 100%; margin-top: 6px; min-height: 32px; border: 0; background: none; color: var(--accent); font: inherit; font-size: 0.84rem; font-weight: 600; cursor: pointer; }
 
 .privacy {
   margin: 10px 0 0;
@@ -160,15 +155,10 @@ button.primary:disabled { opacity: 0.6; cursor: wait; }
 }
 
 #staff-panel { margin-top: 10px; }
-body.staff-active #staff-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .staff-heading { display: flex; align-items: center; justify-content: space-between; }
 .staff-help { margin: 4px 0 8px; color: var(--muted); font-size: 0.85rem; }
 .text-button { border: 0; background: none; color: var(--accent); font: inherit; font-weight: 600; cursor: pointer; }
-.sort-toggle { display: flex; gap: 6px; margin-bottom: 8px; }
-.sort-button { flex: 1; min-height: 36px; border: 1px solid var(--accent); border-radius: 999px; background: var(--bg); color: var(--accent); font: inherit; font-size: 0.82rem; font-weight: 600; cursor: pointer; }
-.sort-button.active { background: var(--accent); color: var(--accent-text); }
 .urgent-list { display: grid; gap: 6px; }
-body.staff-active .urgent-list { flex: 1; min-height: 0; overflow-y: auto; padding-right: 2px; }
 .urgent-list p { margin: 0; color: var(--muted); font-size: 0.9rem; }
 .urgent-item { padding: 8px 10px; border-left: 4px solid var(--red); background: #fff4f4; border-radius: 6px; }
 .urgent-item strong, .urgent-item span { display: block; }
@@ -191,3 +181,11 @@ body.staff-active .urgent-list { flex: 1; min-height: 0; overflow-y: auto; paddi
 
 /* Remove Leaflet's default white box around our custom pins */
 .leaflet-div-icon { background: transparent; border: 0; }
+
+/* Floor-by-floor list inside a building popup */
+.floor-list { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; }
+.floor-row { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; }
+.floor-row .dot { width: 18px; height: 18px; font-size: 11px; flex: none; }
+.floor-row .floor-name { flex: 1; }
+.floor-row .floor-pct { color: var(--muted); white-space: nowrap; }
+.popup .hint { color: var(--muted); font-size: 0.75rem; }
