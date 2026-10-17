@@ -1,14 +1,14 @@
 """Pretend to be every dispenser, so you can demo without hardware.
 
 Each round, every dispenser sends a reading to the API exactly like a real
-ESP32 would. Products get taken at random, so levels drift down, alerts
+Pico W would. Products get taken at random, so levels drift down, alerts
 appear, and the occasional dispenser gets refilled.
 
 Usage (backend must be running):
     python simulator/fake_sensors.py                      # local backend
     python simulator/fake_sensors.py --url https://<your-app>.onrender.com
     python simulator/fake_sensors.py --interval 5 --busy  # fast, for a live demo
-    python simulator/fake_sensors.py --skip crc-1f        # leave one offline
+    python simulator/fake_sensors.py --skip p264079        # leave one offline
 
 Needs only the "httpx" package (pip install httpx).
 Uses the demo device keys from backend/app/seed.py ("demo-<dispenser id>").
@@ -22,7 +22,7 @@ import time
 import httpx
 
 # Keep these in sync with backend/app/config.py (placeholders for now).
-FULL_MM = 40
+FULL_MM = 50
 EMPTY_MM = 400
 PRODUCT_MM = 18
 CAPACITY = round((EMPTY_MM - FULL_MM) / PRODUCT_MM)  # 20
@@ -44,7 +44,7 @@ def units_from_fill(fill_percent: float | None) -> int:
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--url", default="http://localhost:8000", help="Backend base URL")
-    p.add_argument("--interval", type=float, default=30, help="Seconds between rounds (real sensors: 300)")
+    p.add_argument("--interval", type=float, default=5, help="Seconds between rounds")
     p.add_argument("--busy", action="store_true", help="Take products faster, to show changes quickly")
     p.add_argument(
         "--refill-chance", type=float, default=0.15, help="Chance an empty dispenser gets refilled each round"

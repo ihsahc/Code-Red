@@ -18,10 +18,10 @@ Every dispenser has exactly one `status`:
 
 | Status | Meaning | Suggested pin color |
 |---|---|---|
-| `full` | above 60% | green |
-| `low` | 15% to 60% | yellow/orange |
+| `full` | above 50% | green |
+| `low` | 15% to 50% | yellow/orange |
 | `empty` | below 15% | red |
-| `offline` | no reading in 15 minutes, or never reported | gray |
+| `offline` | no reading in 2 minutes, or never reported | gray |
 
 `fill_percent` and `units_left` are `null` until a dispenser has reported
 at least once. For `offline` dispensers they show the **last known** value,
@@ -35,7 +35,7 @@ Most endpoints return this shape:
 
 ```json
 {
-  "id": "klaus-1f",
+  "id": "klaus-atrium-pico-w",
   "building": {
     "id": 3,
     "name": "Klaus Advanced Computing Building",
@@ -62,7 +62,7 @@ when the pin is tapped.
 
 ### `GET /dispensers`
 
-Every dispenser. This is what the map loads. Poll it every 30 to 60 seconds to
+Every dispenser. This is what the map loads. Poll it every 5 seconds to
 keep pins up to date.
 
 Optional query: `?status=full` (or `low`, `empty`, `offline`) to filter.
@@ -119,9 +119,8 @@ switches which screens are shown.
 
 ### `GET /staff/restock`
 
-Dispensers that need attention, most urgent first: `empty`, then `offline`,
-then `low`, with the lowest fill first within each group. Full dispensers
-are left out. Returns a list of Dispenser objects.
+Empty dispensers only, longest empty first. Offline and low dispensers stay on
+the map but do not appear in the urgent list. Returns Dispenser objects.
 
 ### `GET /staff/alerts`
 
@@ -161,15 +160,16 @@ banner and update the remembered time. (URL-encode the time, e.g. with
 
 ### `POST /readings`
 
-Sent by each dispenser (or the simulator) every 5 minutes. The frontend never calls this.
+Sent by each dispenser (or the simulator) every 5 seconds for the demo. The
+frontend never calls this.
 
 Header: `X-Device-Key: <the dispenser's secret>`
 
 ```json
-{ "dispenser_id": "klaus-1f", "distance_mm": 300, "battery_v": 3.8 }
+{ "dispenser_id": "klaus-atrium-pico-w", "distance_mm": 300, "battery_v": 3.8 }
 ```
 
-Returns `201` with `{ "dispenser_id": "klaus-1f", "fill_percent": 27.8, "status": "low" }`,
+Returns `201` with `{ "dispenser_id": "klaus-atrium-pico-w", "fill_percent": 27.8, "status": "low" }`,
 or `401` if the ID or key is wrong.
 
 ---

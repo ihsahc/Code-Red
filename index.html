@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Dispenser Finder</title>
+  <title>Code Red</title>
 
   <!-- Leaflet (the map library), loaded from the internet -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -11,8 +11,11 @@
 </head>
 <body>
   <header class="topbar">
-    <h1>Dispenser Finder</h1>
-    <span class="view-tag">Student View</span>
+    <h1>Code Red</h1>
+    <div class="header-actions">
+      <span id="data-source" class="data-source">Loading…</span>
+      <button id="view-btn" class="view-tag" type="button">Staff View</button>
+    </div>
   </header>
 
   <!-- The map fills the middle of the screen -->
@@ -28,6 +31,15 @@
     </ul>
 
     <button id="find-btn" class="primary">Find nearest stocked (15%+)</button>
+
+    <section id="staff-panel" hidden>
+      <div class="staff-heading">
+        <strong>Urgent refills</strong>
+        <button id="student-btn" class="text-button" type="button">Student View</button>
+      </div>
+      <p class="staff-help">Empty dispensers, longest empty first.</p>
+      <div id="urgent-list" class="urgent-list" aria-live="polite"></div>
+    </section>
 
     <!-- Shown only if the user says no to location access -->
     <div id="fallback" class="fallback" hidden>

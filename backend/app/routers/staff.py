@@ -14,7 +14,7 @@ from app.database import get_db
 from app.models import Alert, Dispenser
 from app.schemas import AlertOut, DispenserOut
 from app.services import alert_out, dispenser_out
-from app.status import URGENCY, Status
+from app.status import Status
 from app.timeutil import to_naive_utc, utcnow
 
 router = APIRouter(prefix="/staff", tags=["Staff"])
@@ -22,15 +22,14 @@ router = APIRouter(prefix="/staff", tags=["Staff"])
 
 @router.get("/restock", response_model=list[DispenserOut])
 def restock_list(db: Session = Depends(get_db)):
-    """Dispensers that need attention, most urgent first: empty, offline, then low.
-
-    Within each group, the lowest fill comes first.
-    """
+    """Empty dispensers only, with the longest-empty shown first."""
     now = utcnow()
     dispensers = db.scalars(select(Dispenser).options(joinedload(Dispenser.building))).all()
-    needs_work = [o for o in (dispenser_out(d, now) for d in dispensers) if o.status != Status.FULL]
-    needs_work.sort(key=lambda o: (URGENCY[o.status], o.fill_percent if o.fill_percent is not None else 0))
-    return needs_work
+    empty = [o for o in (dispenser_out(d, now) for d in dispensers) if o.status == Status.EMPTY]
+    open_alerts = db.scalars(select(Alert).where(Alert.resolved_at.is_(None), Alert.level == Status.EMPTY)).all()
+    empty_since = {a.dispenser_id: a.created_at for a in open_alerts}
+    empty.sort(key=lambda o: empty_since.get(o.id, now))
+    return empty
 
 
 @router.get("/alerts", response_model=list[AlertOut])

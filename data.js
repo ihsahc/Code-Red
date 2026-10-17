@@ -15,7 +15,7 @@
 const DISPENSERS = [
   { id: "p264591", building: "Clough Undergraduate Learning Commons", floor: "Floor 1 (placeholder)", lat: 33.774868, lng: -84.3964,   fill: 88,  demo: true },
   { id: "p264520", building: "Gilbert Memorial Library",              floor: "Floor 1 (placeholder)", lat: 33.774426, lng: -84.39579,  fill: 72,  demo: true },
-  { id: "p264951", building: "Klaus Advanced Computing Building",     floor: "Floor 1 (placeholder)", lat: 33.777225, lng: -84.39621,  fill: 55,  demo: true },
+  { id: "klaus-atrium-pico-w", building: "Klaus Advanced Computing Building", floor: "Atrium", lat: 33.777524, lng: -84.396128, fill: 55, demo: false },
   { id: "p279898", building: "Stamps Health Services",                floor: "Floor 1 (placeholder)", lat: 33.774773, lng: -84.402885, fill: 40,  demo: true },
   { id: "p473312", building: "Kendeda Building",                      floor: "Floor 2 (placeholder)", lat: 33.778774, lng: -84.399574, fill: 22,  demo: true },
   { id: "p264141", building: "Skiles",                                floor: "Floor 1 (placeholder)", lat: 33.773582, lng: -84.39595,  fill: 12,  demo: true },

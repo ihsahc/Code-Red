@@ -1,8 +1,9 @@
 # Code-Red
 
-A website made for Georgia Tech students to see where pads and tampons are
-available, specifically in the libraries. It also notifies staff when
-pads/tampons are running low.
+A phone-friendly website that shows Georgia Tech students live fill levels of
+tampon dispensers across campus. It directs students to the nearest stocked
+dispenser (15%+) and shows facilities staff which empty dispenser needs a
+refill first.
 
 Each dispenser has a sensor that measures how full it is, and the map shows
 which dispensers are **full**, **running low**, or **empty**, and points you
@@ -14,8 +15,8 @@ Built for **Hack Like W@CC** (theme: Back to 2016, track: Health & Accessibility
 
 ```
  Dispenser                      Backend (FastAPI)                Website
- ┌──────────────┐  every 5 min  ┌──────────────────────┐  JSON   ┌───────────────┐
- │ ESP32 +      │ ────────────▶ │ distance → fill %    │ ◀────── │ Student: map, │
+ ┌──────────────┐  every 5 sec  ┌──────────────────────┐  JSON   ┌───────────────┐
+ │ Pico W +     │ ────────────▶ │ distance → fill %    │ ◀────── │ Student: map, │
  │ VL53L0X      │  POST         │ → full/low/empty     │  GET    │ nearest       │
  │ distance     │  /readings    │ alerts for staff     │         │ Staff: restock│
  └──────────────┘               └──────────────────────┘         │ list, alerts  │
@@ -31,9 +32,9 @@ raises an alert for staff when a dispenser runs low or empty.
 
 ```
 backend/     FastAPI server, database, status logic, tests
-frontend/    The website (phone-friendly)
+index.html, app.js, style.css, config.js, data.js  The phone-friendly website
 simulator/   Fake sensors for demos without hardware
-firmware/    ESP32 code for the real dispenser
+firmware/    Pico W / CircuitPython notes for the real dispenser
 docs/        API.md: the contract between backend and frontend
 ```
 
@@ -64,7 +65,7 @@ python simulator/fake_sensors.py --interval 5 --busy
 
 Every dispenser starts reporting. Levels drop, alerts appear, and empty
 dispensers occasionally get refilled. Use `--url https://<your-app>.onrender.com`
-to drive the deployed version, and `--skip crc-1f` to leave one dispenser
+to drive the deployed version, and `--skip p264079` to leave one dispenser
 silent so it shows as offline.
 
 ## Tests
@@ -82,7 +83,7 @@ environment variables on Render):
 
 | Setting | How to measure | Placeholder |
 |---|---|---|
-| `FULL_DISTANCE_MM` | Sensor reading with the column completely full | 40 |
+| `FULL_DISTANCE_MM` | Sensor reading with the column completely full | 50 |
 | `EMPTY_DISTANCE_MM` | Sensor reading with the column completely empty | 400 |
 | `PRODUCT_THICKNESS_MM` | Thickness of one wrapped tampon lying flat | 18 |
 
@@ -90,8 +91,23 @@ Keep the sensor at least 3 to 4 cm above a full stack: the VL53L0X is
 unreliable very close up. Also update the same numbers at the top of
 `simulator/fake_sensors.py`.
 
-Status rules (also in `config.py`): **full** above 60%, **low** 15–60%,
-**empty** below 15%, **offline** after 15 minutes with no reading.
+Status rules (also in `config.py`): **full** above 50%, **low** 15–50%,
+**empty** below 15%, **offline** after 2 minutes with no reading. A fill jump
+of 30 percentage points or more marks a refill.
+
+## Running the website
+
+Start the API first, then serve the repository root (do not double-click
+`index.html`; browsers restrict some features when it is opened as a file):
+
+```bash
+python -m http.server 8080
+```
+
+Open `http://localhost:8080`. The default API URL in `config.js` is
+`http://localhost:8000`. When the API is unavailable, the site labels and uses
+its local demo fallback. Before deploying the static site to GitHub Pages,
+replace `API_BASE_URL` in `config.js` with the HTTPS Render URL.
 
 ## Deploying to Render (free)
 

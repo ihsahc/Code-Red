@@ -17,7 +17,7 @@ from app.timeutil import utcnow  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy.pool import StaticPool  # noqa: E402
 
-FULL_MM, EMPTY_MM, LOW_MM = 40, 400, 250
+FULL_MM, EMPTY_MM, LOW_MM = 50, 400, 225
 
 
 @pytest.fixture
@@ -54,22 +54,22 @@ def send(client, dispenser_id, distance_mm, key):
 def test_fill_percent_endpoints_and_clamping():
     assert fill_percent(FULL_MM) == 100
     assert fill_percent(EMPTY_MM) == 0
-    assert fill_percent(220) == 50
+    assert fill_percent(225) == 50
     assert fill_percent(10) == 100  # closer than "full" still counts as 100
     assert fill_percent(900) == 0  # farther than "empty" still counts as 0
 
 
 def test_status_thresholds():
-    assert status_from_percent(61) == Status.FULL
-    assert status_from_percent(60) == Status.LOW
+    assert status_from_percent(51) == Status.FULL
+    assert status_from_percent(50) == Status.LOW
     assert status_from_percent(15) == Status.LOW
     assert status_from_percent(14.9) == Status.EMPTY
 
 
 def test_offline_after_silence():
     now = utcnow()
-    assert current_status(90, now - timedelta(minutes=5), now) == Status.FULL
-    assert current_status(90, now - timedelta(minutes=20), now) == Status.OFFLINE
+    assert current_status(90, now - timedelta(minutes=1), now) == Status.FULL
+    assert current_status(90, now - timedelta(minutes=3), now) == Status.OFFLINE
     assert current_status(None, None, now) == Status.OFFLINE
 
 
@@ -83,7 +83,7 @@ def test_reading_requires_correct_key(client):
 
 
 def test_reading_updates_dispenser(client):
-    r = send(client, "near", 220, "k1")
+    r = send(client, "near", 225, "k1")
     assert r.status_code == 201
     assert r.json() == {"dispenser_id": "near", "fill_percent": 50.0, "status": "low"}
     d = client.get("/dispensers/near").json()
@@ -124,10 +124,11 @@ def test_alerts_since_filter(client):
 # --- Map and staff views ---------------------------------------------------
 
 
-def test_restock_list_is_sorted_by_urgency(client):
+def test_restock_list_has_only_empty_dispensers(client):
     send(client, "near", LOW_MM, "k1")
-    order = [d["id"] for d in client.get("/staff/restock").json()]
-    assert order == ["far", "near"]  # offline before low
+    assert client.get("/staff/restock").json() == []
+    send(client, "near", EMPTY_MM, "k1")
+    assert [d["id"] for d in client.get("/staff/restock").json()] == ["near"]
 
 
 def test_nearest_skips_empty_and_offline(client):

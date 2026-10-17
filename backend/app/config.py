@@ -37,7 +37,7 @@ SEED_DEMO_DATA = _get_bool("SEED_DEMO_DATA", True)
 
 # --- Sensor calibration (PLACEHOLDERS) ------------------------------------
 # Distance from the VL53L0X to the top of a FULL stack, in millimetres.
-FULL_DISTANCE_MM = _get_float("FULL_DISTANCE_MM", 40)
+FULL_DISTANCE_MM = _get_float("FULL_DISTANCE_MM", 50)
 # Distance from the sensor to the floor of an EMPTY column, in millimetres.
 EMPTY_DISTANCE_MM = _get_float("EMPTY_DISTANCE_MM", 400)
 # Thickness of one wrapped tampon lying flat, in millimetres.
@@ -45,13 +45,13 @@ PRODUCT_THICKNESS_MM = _get_float("PRODUCT_THICKNESS_MM", 18)
 
 # --- Status rules ---------------------------------------------------------
 # Above this fill percentage a dispenser counts as "full".
-FULL_ABOVE_PERCENT = _get_float("FULL_ABOVE_PERCENT", 60)
+FULL_ABOVE_PERCENT = _get_float("FULL_ABOVE_PERCENT", 50)
 # Below this fill percentage a dispenser counts as "empty".
 EMPTY_BELOW_PERCENT = _get_float("EMPTY_BELOW_PERCENT", 15)
 # A dispenser with no reading for this long counts as "offline".
-OFFLINE_AFTER_MINUTES = _get_float("OFFLINE_AFTER_MINUTES", 15)
+OFFLINE_AFTER_MINUTES = _get_float("OFFLINE_AFTER_MINUTES", 2)
 # A jump in fill this large between two readings is treated as a refill.
-REFILL_JUMP_PERCENT = _get_float("REFILL_JUMP_PERCENT", 15)
+REFILL_JUMP_PERCENT = _get_float("REFILL_JUMP_PERCENT", 30)
 
 # --- Web ------------------------------------------------------------------
 # Which websites may call this API from a browser. "*" allows any site,

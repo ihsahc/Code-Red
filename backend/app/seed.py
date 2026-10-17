@@ -1,4 +1,4 @@
-"""Demo data: a few campus buildings and dispensers in a mix of states.
+"""Demo data: 19 campus dispensers in a mix of states.
 
 Runs automatically on startup when the database is empty (SEED_DEMO_DATA=true).
 To wipe and re-seed locally:   python -m app.seed --reset
@@ -21,43 +21,40 @@ from app.models import Building, Dispenser
 from app.services import record_reading
 from app.timeutil import utcnow
 
-BUILDINGS = [
-    # name, lat, lng  (approximate)
-    ("John Lewis Student Center", 33.7740, -84.3988),
-    ("Clough Undergraduate Learning Commons", 33.7746, -84.3964),
-    ("Klaus Advanced Computing Building", 33.7771, -84.3962),
-    ("Price Gilbert Library", 33.7743, -84.3957),
-    ("Campus Recreation Center", 33.7756, -84.4038),
-    ("Howey Physics Building", 33.7775, -84.3988),
-    ("Scheller College of Business", 33.7764, -84.3876),
-    ("West Village", 33.7796, -84.4048),
-]
-
 DISPENSERS = [
-    # id, building, floor, location note, starting distance in mm (None = offline)
-    ("stuc-1f", "John Lewis Student Center", "1", "Women's restroom near the food court", 70),
-    ("stuc-2f", "John Lewis Student Center", "2", "Women's restroom by the ballrooms", 260),
-    ("culc-1f", "Clough Undergraduate Learning Commons", "1", "Women's restroom by the main entrance", 380),
-    ("culc-3f", "Clough Undergraduate Learning Commons", "3", "Women's restroom near the study rooms", 90),
-    ("klaus-1f", "Klaus Advanced Computing Building", "1", "Women's restroom off the atrium", 300),
-    ("library-2f", "Price Gilbert Library", "2", "Women's restroom by the elevators", 55),
-    ("crc-1f", "Campus Recreation Center", "1", "Women's locker room", None),
-    ("howey-1f", "Howey Physics Building", "1", "Women's restroom by the lecture halls", 120),
-    ("scheller-2f", "Scheller College of Business", "2", "Women's restroom near the cafe", 240),
-    ("wv-1f", "West Village", "1", "Women's restroom by the dining hall", 60),
+    # id, building, floor, location note, lat, lng, starting distance (None = offline)
+    ("p264591", "Clough Undergraduate Learning Commons", "Floor 1", "Women's restroom", 33.774868, -84.396400, 92),
+    ("p264520", "Gilbert Memorial Library", "Floor 1", "Women's restroom", 33.774426, -84.395790, 148),
+    ("klaus-atrium-pico-w", "Klaus Advanced Computing Building", "Atrium", "Women's restroom in the Klaus atrium", 33.777524, -84.396128, 208),
+    ("p279898", "Stamps Health Services", "Floor 1", "Women's restroom", 33.774773, -84.402885, 260),
+    ("p473312", "Kendeda Building", "Floor 2", "Women's restroom", 33.778774, -84.399574, 323),
+    ("p264141", "Skiles", "Floor 1", "Women's restroom", 33.773582, -84.395950, 358),
+    ("p279888", "Van Leer Building", "Floor 1", "Women's restroom", 33.775948, -84.397141, 383),
+    ("p264081", "College of Computing", "Floor 1", "Women's restroom", 33.777363, -84.397354, 400),
+    ("p264568", "Ferst Center for the Arts", "Floor 1", "Women's restroom", 33.775181, -84.399338, 68),
+    ("p451379", "Instructional Center", "Floor 1", "Women's restroom", 33.775505, -84.401314, 295),
+    ("p264079", "Tech Tower", "Floor 1", "Women's restroom", 33.772457, -84.394730, None),
+    ("p261362", "Lyman Hall", "Floor 1", "Women's restroom", 33.772926, -84.394096, 337),
+    ("p377482", "McCamish Pavilion", "Floor 1", "Women's restroom", 33.780731, -84.392822, 372),
+    ("p279901", "West Village Dining Commons", "Floor 1", "Women's restroom", 33.779331, -84.404793, 134),
+    ("p279193", "Howey School of Physics", "Floor 1", "Women's restroom", 33.777431, -84.398552, 239),
+    ("p264602", "Marcus Nanotechnology Building", "Floor 1", "Women's restroom", 33.778912, -84.398628, 50),
+    ("p347966", "North Avenue Dining", "Floor 1", "Women's restroom", 33.770973, -84.391121, 278),
+    ("p264950", "Smithgall Student Services Building", "Floor 1", "Women's restroom", 33.774384, -84.399590, 351),
+    ("p264600", "TSRB", "Floor 1", "Women's restroom", 33.777115, -84.390083, 190),
 ]
 
 
 def seed(db: Session) -> None:
     buildings = {}
-    for name, lat, lng in BUILDINGS:
-        b = Building(name=name, lat=lat, lng=lng)
-        db.add(b)
-        buildings[name] = b
+    for _, name, _, _, lat, lng, _ in DISPENSERS:
+        if name not in buildings:
+            buildings[name] = Building(name=name, lat=lat, lng=lng)
+            db.add(buildings[name])
     db.flush()
 
     now = utcnow()
-    for dispenser_id, building, floor, note, distance in DISPENSERS:
+    for dispenser_id, building, floor, note, _, _, distance in DISPENSERS:
         d = Dispenser(
             id=dispenser_id,
             building_id=buildings[building].id,
@@ -74,8 +71,8 @@ def seed(db: Session) -> None:
         else:
             # Start every dispenser full an hour ago, then move to its current level,
             # so alerts and history look realistic.
-            record_reading(db, d, 45, 3.9, at=now - timedelta(hours=1))
-            record_reading(db, d, distance, 3.8, at=now - timedelta(minutes=2))
+            record_reading(db, d, 50, 3.9, at=now - timedelta(hours=1))
+            record_reading(db, d, distance, 3.8, at=now - timedelta(seconds=30))
     db.commit()
 
 

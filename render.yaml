@@ -18,11 +18,19 @@ services:
         value: "true"
       # Sensor calibration. Replace the placeholders once measured.
       - key: FULL_DISTANCE_MM
-        value: "40"
+        value: "50"
       - key: EMPTY_DISTANCE_MM
         value: "400"
       - key: PRODUCT_THICKNESS_MM
         value: "18"
+      - key: FULL_ABOVE_PERCENT
+        value: "50"
+      - key: EMPTY_BELOW_PERCENT
+        value: "15"
+      - key: OFFLINE_AFTER_MINUTES
+        value: "2"
+      - key: REFILL_JUMP_PERCENT
+        value: "30"
 
 databases:
   - name: code-red-db

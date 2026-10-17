@@ -1,240 +1,47 @@
-// app.js — the logic: draws the map, colors the pins, fakes live data,
-// and finds the nearest stocked dispenser.
-
-// ---------- 1. Set up dispensers with live fields ----------
-// Copy each dispenser from data.js and add fields that change over time.
-const now0 = Date.now();
-const dispensers = DISPENSERS.map((d) => ({
-  ...d,
-  // Offline fake dispensers get an old timestamp so they show as gray.
-  lastReading: d.offline ? now0 - 10 * 60 * 1000 : now0,
-  statusChangedAt: now0,
-  status: null,
-}));
-
-// ---------- 2. Status logic ----------
-function computeStatus(d) {
-  const stale = Date.now() - d.lastReading > CONFIG.OFFLINE_AFTER_MS;
-  if (stale) return "gray";
-  if (d.fill > CONFIG.GREEN_ABOVE) return "green";
-  if (d.fill >= CONFIG.STOCKED_MIN) return "yellow";
-  return "red";
-}
-
-const STATUS_INFO = {
-  green:  { symbol: "✓", label: "Well stocked" },
-  yellow: { symbol: "~", label: "Running lower" },
-  red:    { symbol: "!", label: "Low or empty" },
-  gray:   { symbol: "?", label: "Offline" },
+// Live API client with a local, matching demo fallback for presentations.
+const apiBase = CONFIG.API_BASE_URL.replace(/\/$/, "");
+let dispensers = [], usingFallback = false, staffMode = false, highlightedId = null, youMarker, routeLine;
+const markers = {};
+const INFO = {
+  full: { color: "green", symbol: "✓", label: "Well stocked" }, low: { color: "yellow", symbol: "~", label: "Running lower" },
+  empty: { color: "red", symbol: "!", label: "Low or empty" }, offline: { color: "gray", symbol: "?", label: "Offline" },
 };
-
-// ---------- 3. Small helpers ----------
-function escapeHtml(text) {
-  const el = document.createElement("div");
-  el.textContent = text;
-  return el.innerHTML;
-}
-
-function timeAgo(ms) {
-  const sec = Math.round((Date.now() - ms) / 1000);
-  if (sec < 5) return "just now";
-  if (sec < 60) return sec + " sec ago";
-  return Math.round(sec / 60) + " min ago";
-}
-
-// Distance between two lat/lng points, in meters (haversine formula).
-function distanceMeters(lat1, lng1, lat2, lng2) {
-  const R = 6371000;
-  const toRad = (deg) => (deg * Math.PI) / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(a));
-}
-
-function formatDistance(m) {
-  const mins = Math.max(1, Math.round(m / CONFIG.WALK_METERS_PER_MIN));
-  const dist = m < 1000 ? Math.round(m) + " m" : (m / 1000).toFixed(1) + " km";
-  return dist + " away (about " + mins + " min walk)";
-}
-
-// ---------- 4. Map and pins ----------
 const map = L.map("map").setView(CONFIG.MAP_CENTER, CONFIG.MAP_ZOOM);
+L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "&copy; OpenStreetMap contributors" }).addTo(map);
+const $ = (id) => document.getElementById(id);
+const escapeHtml = (value) => { const el = document.createElement("div"); el.textContent = value ?? ""; return el.innerHTML; };
+function timeAgo(iso) { if (!iso) return "never"; const s = Math.max(0, Math.round((Date.now() - new Date(iso)) / 1000)); return s < 5 ? "just now" : s < 60 ? `${s} sec ago` : `${Math.round(s / 60)} min ago`; }
+function distance(a, b, c, d) { const r = (n) => n * Math.PI / 180, h = Math.sin(r(c - a) / 2) ** 2 + Math.cos(r(a)) * Math.cos(r(c)) * Math.sin(r(d - b) / 2) ** 2; return 12742000 * Math.asin(Math.sqrt(h)); }
+function distanceText(m) { return `${m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(1)} km`} away (about ${Math.max(1, Math.round(m / CONFIG.WALK_METERS_PER_MIN))} min walk)`; }
 
-L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-  maxZoom: 19,
-  attribution: "&copy; OpenStreetMap contributors",
-}).addTo(map);
-
-const markers = {};        // id -> Leaflet marker
-let highlightedId = null;  // which pin is the "nearest" result
-
-function pinIcon(d) {
-  const info = STATUS_INFO[d.status];
-  const extra = d.id === highlightedId ? " highlight" : "";
-  return L.divIcon({
-    className: "",
-    html: `<div class="pin ${d.status}${extra}">${info.symbol}</div>`,
-    iconSize: [30, 30],
-    iconAnchor: [15, 15],
-    popupAnchor: [0, -16],
-  });
+function fallbackData() {
+  const now = Date.now();
+  return DISPENSERS.map((d) => ({ id: d.id, building: { name: d.building, lat: d.lat, lng: d.lng }, floor: d.floor, location_note: "Women's restroom", fill_percent: d.fill, last_reading_at: new Date(d.offline ? now - 600000 : now).toISOString(), status: d.offline ? "offline" : d.fill > CONFIG.GREEN_ABOVE ? "full" : d.fill >= CONFIG.STOCKED_MIN ? "low" : "empty", demo: !CONFIG.REAL_DISPENSER_IDS.includes(d.id) }));
 }
-
-function popupHtml(d) {
-  const info = STATUS_INFO[d.status];
-  const fillLine =
-    d.status === "gray"
-      ? "<p>No recent reading</p>"
-      : `<p><strong>${Math.round(d.fill)}%</strong> full: ${info.label}</p>`;
-  return `
-    <div class="popup">
-      <h3>${escapeHtml(d.building)}</h3>
-      <p>${escapeHtml(d.floor)}</p>
-      ${fillLine}
-      <p>Updated ${timeAgo(d.lastReading)}</p>
-      ${d.demo ? '<span class="badge">Demo data</span>' : ""}
-    </div>`;
+function normalize(d) { return { ...d, demo: !CONFIG.REAL_DISPENSER_IDS.includes(d.id) }; }
+function icon(d) { const i = INFO[d.status], h = d.id === highlightedId ? " highlight" : ""; return L.divIcon({ className: "", html: `<div class="pin ${i.color}${h}">${i.symbol}</div>`, iconSize: [30, 30], iconAnchor: [15, 15], popupAnchor: [0, -16] }); }
+function popup(d) { const i = INFO[d.status], fill = d.status === "offline" ? "<p>No recent reading</p>" : `<p><strong>${Math.round(d.fill_percent)}%</strong> full: ${i.label}</p>`; return `<div class="popup"><h3>${escapeHtml(d.building.name)}</h3><p>${escapeHtml(d.floor)} · ${escapeHtml(d.location_note)}</p>${fill}<p>Updated ${timeAgo(d.last_reading_at)}</p><span class="badge ${d.demo ? "" : "real"}">${d.demo ? "Demo data" : "Live dispenser"}</span></div>`; }
+function render() { dispensers.forEach((d) => { if (!markers[d.id]) markers[d.id] = L.marker([d.building.lat, d.building.lng], { icon: icon(d) }).bindPopup(() => popup(dispensers.find((current) => current.id === d.id) || d)).addTo(map); else { markers[d.id].setIcon(icon(d)); if (markers[d.id].isPopupOpen()) markers[d.id].setPopupContent(popup(d)); } }); }
+function fillBuildings() { const unique = [...new Map(dispensers.map((d) => [d.building.name, d])).values()].sort((a, b) => a.building.name.localeCompare(b.building.name)); $("building-select").innerHTML = '<option value="">Choose a building…</option>' + unique.map((d) => `<option value="${d.id}">${escapeHtml(d.building.name)}</option>`).join(""); }
+function result(html, warning = false) { $("result").innerHTML = html; $("result").classList.toggle("warn", warning); $("result").hidden = false; }
+function clearHighlight() { highlightedId = null; if (routeLine) { map.removeLayer(routeLine); routeLine = null; } }
+function nearest(lat, lng, label) {
+  clearHighlight(); const choices = dispensers.filter((d) => d.status === "full" || d.status === "low").map((d) => ({ d, meters: distance(lat, lng, d.building.lat, d.building.lng) })).sort((a, b) => a.meters - b.meters);
+  if (!choices.length) return result("<strong>No stocked dispensers right now.</strong><span>Every dispenser is low, empty, or offline.</span>", true);
+  const best = choices[0]; highlightedId = best.d.id; render(); routeLine = L.polyline([[lat, lng], [best.d.building.lat, best.d.building.lng]], { color: "#0b3d91", weight: 3, dashArray: "6 8" }).addTo(map); map.fitBounds([[lat, lng], [best.d.building.lat, best.d.building.lng]], { padding: [60, 60], maxZoom: 18 }); markers[best.d.id].openPopup(); result(`<strong>${escapeHtml(best.d.building.name)}</strong><span>${escapeHtml(best.d.floor)} · ${Math.round(best.d.fill_percent)}% full · ${distanceText(best.meters)}${label ? ` from ${escapeHtml(label)}` : ""}</span>`);
 }
+function locationFallback() { $("fallback").hidden = false; result("<strong>Location is off.</strong><span>Pick your building and we'll find the nearest stocked dispenser.</span>", true); }
 
-// Recompute every status, then redraw pins and popups.
-function render() {
-  for (const d of dispensers) {
-    const newStatus = computeStatus(d);
-    if (newStatus !== d.status) {
-      d.status = newStatus;
-      d.statusChangedAt = Date.now(); // used later for "red the longest"
-    }
-    if (!markers[d.id]) {
-      markers[d.id] = L.marker([d.lat, d.lng], { icon: pinIcon(d) })
-        .bindPopup(() => popupHtml(d))
-        .addTo(map);
-    } else {
-      markers[d.id].setIcon(pinIcon(d));
-      if (markers[d.id].isPopupOpen()) markers[d.id].setPopupContent(popupHtml(d));
-    }
-  }
+async function urgent() {
+  if (!staffMode) return;
+  let empty = [];
+  try { if (!usingFallback) { const r = await fetch(`${apiBase}/staff/alerts`); if (!r.ok) throw Error(); empty = (await r.json()).filter((a) => a.level === "empty").sort((a, b) => new Date(a.created_at) - new Date(b.created_at)).map((a) => ({ building: a.building_name, floor: a.floor, fill: a.fill_percent, since: a.created_at })); } else throw Error(); } catch { empty = dispensers.filter((d) => d.status === "empty").map((d) => ({ building: d.building.name, floor: d.floor, fill: d.fill_percent, since: d.last_reading_at })); }
+  $("urgent-list").innerHTML = empty.length ? empty.map((d) => `<div class="urgent-item"><strong>${escapeHtml(d.building)}</strong><span>${escapeHtml(d.floor)} · ${Math.round(d.fill)}% full · empty ${timeAgo(d.since)}</span></div>`).join("") : "<p>Nothing is empty right now.</p>";
 }
+async function load() { try { const r = await fetch(`${apiBase}/dispensers`); if (!r.ok) throw Error(); dispensers = (await r.json()).map(normalize); usingFallback = false; $("data-source").textContent = "Live data"; } catch { dispensers = fallbackData(); usingFallback = true; $("data-source").textContent = "Demo fallback"; } render(); fillBuildings(); urgent(); }
 
-// ---------- 5. Fake live data ----------
-// Every few seconds each fake dispenser "reports in": its timestamp refreshes
-// (so it doesn't turn gray) and its fill drifts down a little.
-// Dispensers marked offline: true never report, so they stay gray.
-function simulateTick() {
-  for (const d of dispensers) {
-    if (!d.demo || d.offline) continue;
-    d.lastReading = Date.now();
-    if (Math.random() < 0.3) d.fill = Math.max(0, d.fill - Math.random() * 2);
-    if (d.fill < 3 && Math.random() < 0.2) d.fill = 100; // pretend staff refilled it
-  }
-  render();
-}
-
-// ---------- 6. Find nearest stocked ----------
-const findBtn = document.getElementById("find-btn");
-const fallbackBox = document.getElementById("fallback");
-const buildingSelect = document.getElementById("building-select");
-const resultBox = document.getElementById("result");
-
-let youMarker = null;
-let routeLine = null;
-
-// Fill the building dropdown (used only if location is denied).
-function fillBuildingDropdown() {
-  const sorted = [...dispensers].sort((a, b) => a.building.localeCompare(b.building));
-  buildingSelect.innerHTML =
-    '<option value="">Choose a building…</option>' +
-    sorted.map((d) => `<option value="${d.id}">${escapeHtml(d.building)}</option>`).join("");
-}
-
-function showResult(html, warn) {
-  resultBox.innerHTML = html;
-  resultBox.classList.toggle("warn", !!warn);
-  resultBox.hidden = false;
-}
-
-function clearHighlight() {
-  highlightedId = null;
-  if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
-}
-
-// Given a spot (lat/lng), find and show the nearest dispenser that is green or yellow.
-function showNearest(lat, lng, label) {
-  clearHighlight();
-
-  const stocked = dispensers.filter((d) => d.status === "green" || d.status === "yellow");
-  if (stocked.length === 0) {
-    showResult("<strong>No stocked dispensers right now.</strong><span>Every dispenser is low or offline.</span>", true);
-    render();
-    return;
-  }
-
-  let best = null;
-  let bestDist = Infinity;
-  for (const d of stocked) {
-    const dist = distanceMeters(lat, lng, d.lat, d.lng);
-    if (dist < bestDist) { best = d; bestDist = dist; }
-  }
-
-  highlightedId = best.id;
-  render();
-
-  routeLine = L.polyline([[lat, lng], [best.lat, best.lng]], {
-    color: "#0b3d91", weight: 3, dashArray: "6 8",
-  }).addTo(map);
-
-  map.fitBounds([[lat, lng], [best.lat, best.lng]], { padding: [60, 60], maxZoom: 18 });
-  markers[best.id].openPopup();
-
-  showResult(
-    `<strong>${escapeHtml(best.building)}</strong>
-     <span>${escapeHtml(best.floor)} · ${Math.round(best.fill)}% full · ${formatDistance(bestDist)}${label ? " from " + escapeHtml(label) : ""}</span>`
-  );
-}
-
-function useBuildingFallback() {
-  fallbackBox.hidden = false;
-  showResult("<strong>Location is off.</strong><span>Pick your building below and we'll find the nearest one.</span>", true);
-}
-
-findBtn.addEventListener("click", () => {
-  if (!("geolocation" in navigator)) { useBuildingFallback(); return; }
-
-  findBtn.disabled = true;
-  findBtn.textContent = "Finding you…";
-
-  navigator.geolocation.getCurrentPosition(
-    (pos) => {
-      // We use the position right now and do NOT save it anywhere.
-      const { latitude, longitude } = pos.coords;
-      fallbackBox.hidden = true;
-
-      if (youMarker) map.removeLayer(youMarker);
-      youMarker = L.circleMarker([latitude, longitude], {
-        radius: 8, color: "#fff", weight: 3, fillColor: "#0b3d91", fillOpacity: 1,
-      }).addTo(map).bindTooltip("You are here");
-
-      showNearest(latitude, longitude, "you");
-      findBtn.disabled = false;
-      findBtn.textContent = "Find nearest stocked (15%+)";
-    },
-    () => {
-      useBuildingFallback();
-      findBtn.disabled = false;
-      findBtn.textContent = "Find nearest stocked (15%+)";
-    },
-    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-  );
-});
-
-buildingSelect.addEventListener("change", () => {
-  const chosen = dispensers.find((d) => d.id === buildingSelect.value);
-  if (chosen) showNearest(chosen.lat, chosen.lng, chosen.building);
-});
-
-// ---------- 7. Start everything ----------
-fillBuildingDropdown();
-render();
-setInterval(simulateTick, CONFIG.SIMULATION_INTERVAL_MS);
+$("find-btn").addEventListener("click", () => { if (!("geolocation" in navigator)) return locationFallback(); $("find-btn").disabled = true; $("find-btn").textContent = "Finding you…"; navigator.geolocation.getCurrentPosition((p) => { const { latitude, longitude } = p.coords; $("fallback").hidden = true; if (youMarker) map.removeLayer(youMarker); youMarker = L.circleMarker([latitude, longitude], { radius: 8, color: "#fff", weight: 3, fillColor: "#0b3d91", fillOpacity: 1 }).addTo(map).bindTooltip("You are here"); nearest(latitude, longitude, "you"); $("find-btn").disabled = false; $("find-btn").textContent = "Find nearest stocked (15%+)"; }, () => { locationFallback(); $("find-btn").disabled = false; $("find-btn").textContent = "Find nearest stocked (15%+)"; }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }); });
+$("building-select").addEventListener("change", () => { const d = dispensers.find((item) => item.id === $("building-select").value); if (d) nearest(d.building.lat, d.building.lng, d.building.name); });
+$("view-btn").addEventListener("click", () => { if (prompt("Enter staff passcode") !== CONFIG.STAFF_PASSCODE) return; staffMode = true; $("view-btn").hidden = true; $("find-btn").hidden = true; $("staff-panel").hidden = false; urgent(); });
+$("student-btn").addEventListener("click", () => { staffMode = false; $("view-btn").hidden = false; $("find-btn").hidden = false; $("staff-panel").hidden = true; });
+load(); setInterval(load, CONFIG.POLL_INTERVAL_MS);
