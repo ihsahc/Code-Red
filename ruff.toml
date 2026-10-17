@@ -1,0 +1,11 @@
+# Python formatting and lint rules for the whole repo.
+#   ruff format .        reformat code
+#   ruff check --fix .   find and fix common mistakes
+line-length = 120
+target-version = "py311"
+
+[lint]
+# E/F: errors and unused code, I: sorted imports, B: likely bugs, UP: modern syntax
+select = ["E", "F", "I", "B", "UP"]
+# FastAPI uses Depends()/Query() as default arguments on purpose.
+ignore = ["B008"]
