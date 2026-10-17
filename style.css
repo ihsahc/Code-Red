@@ -190,3 +190,21 @@ button.primary:disabled { opacity: 0.6; cursor: wait; }
 .floor-row .floor-name { flex: 1; }
 .floor-row .floor-pct { color: var(--muted); white-space: nowrap; }
 .popup .hint { color: var(--muted); font-size: 0.75rem; }
+/* Staff sort toggle: "Longest empty" / "Closest to me" */
+.sort-toggle { display: flex; gap: 0; margin: 0 0 8px; border: 1px solid var(--accent); border-radius: 999px; overflow: hidden; }
+.sort-button { flex: 1; min-height: 40px; padding: 0 12px; border: 0; background: var(--bg); color: var(--accent); font: inherit; font-size: 0.9rem; font-weight: 600; cursor: pointer; }
+.sort-button + .sort-button { border-left: 1px solid var(--accent); }
+.sort-button.active { background: var(--accent); color: var(--accent-text); }
+.sort-button:disabled { opacity: 0.6; cursor: wait; }
+.staff-note { margin: 0 0 4px; padding: 6px 10px; border-radius: 6px; background: #fff4f4; color: var(--muted); font-size: 0.82rem; }
+
+/* "Clear nearest result" button under the result box */
+.clear-result { margin-top: 8px; padding: 0; border: 0; background: none; color: var(--accent); font: inherit; font-size: 0.85rem; font-weight: 600; cursor: pointer; }
+
+/* Pop-up alert at the top of the screen (e.g. wrong staff passcode) */
+.toast { position: fixed; top: 56px; left: 50%; transform: translateX(-50%); z-index: 3000; display: flex; align-items: center; gap: 12px; width: min(92vw, 420px); padding: 12px 14px; background: var(--bg); border: 1px solid var(--border); border-left: 5px solid var(--red); border-radius: var(--radius); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25); }
+.toast[hidden] { display: none; }
+.toast-text { flex: 1; }
+.toast-text strong, .toast-text span { display: block; }
+.toast-text span { color: var(--muted); font-size: 0.85rem; }
+.toast-close { flex: none; min-height: 36px; padding: 0 14px; border: 0; border-radius: 999px; background: var(--accent); color: var(--accent-text); font: inherit; font-weight: 600; cursor: pointer; }

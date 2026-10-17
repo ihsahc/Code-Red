@@ -1,6 +1,6 @@
 // Live API client with a local, matching demo fallback for presentations.
 const apiBase = CONFIG.API_BASE_URL.replace(/\/$/, "");
-let dispensers = [], buildings = new Map(), usingFallback = false, staffMode = false, highlightedName = null, youMarker, routeLine;
+let dispensers = [], buildings = new Map(), usingFallback = false, staffMode = false, staffSort = "longest", staffLocation = null, staffNote = "", highlightedName = null, youMarker, routeLine;
 const markers = {};
 const INFO = {
   full: { color: "green", symbol: "✓", label: "Well stocked" }, low: { color: "yellow", symbol: "~", label: "Running lower" },
@@ -56,8 +56,20 @@ function render() {
   Object.keys(markers).forEach((name) => { if (!buildings.has(name)) { map.removeLayer(markers[name]); delete markers[name]; } });
 }
 function fillBuildings() { const names = [...buildings.keys()].sort((a, b) => a.localeCompare(b)); $("building-select").innerHTML = '<option value="">Choose a building…</option>' + names.map((n) => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join(""); }
-function result(html, warning = false) { $("result").innerHTML = html; $("result").classList.toggle("warn", warning); $("result").hidden = false; }
+function result(html, warning = false) { $("result").innerHTML = html; $("result").classList.toggle("warn", warning); $("result").hidden = false; $("clear-result").hidden = false; }
 function clearHighlight() { highlightedName = null; if (routeLine) { map.removeLayer(routeLine); routeLine = null; } }
+// Same as pressing "Clear nearest result": remove the route, highlight and result box.
+function clearNearest() { clearHighlight(); render(); $("result").hidden = true; $("clear-result").hidden = true; $("fallback").hidden = true; }
+// A small pop-up alert at the top of the screen, with a Close button (also closes itself after 6 seconds).
+let toastTimer;
+function hideAlert() { const el = $("toast"); if (el) el.hidden = true; clearTimeout(toastTimer); }
+function showAlert(title, text) {
+  let el = $("toast");
+  if (!el) { el = document.createElement("div"); el.id = "toast"; el.className = "toast"; el.setAttribute("role", "alert"); document.body.appendChild(el); }
+  el.innerHTML = `<div class="toast-text"><strong>${escapeHtml(title)}</strong><span>${escapeHtml(text)}</span></div><button type="button" class="toast-close">Close</button>`;
+  el.querySelector(".toast-close").addEventListener("click", hideAlert);
+  el.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(hideAlert, 6000);
+}
 function nearest(lat, lng, label) {
   clearHighlight(); const choices = [...buildings.values()].filter((b) => b.status === "full" || b.status === "low").map((b) => ({ b, meters: distance(lat, lng, b.lat, b.lng) })).sort((a, b) => a.meters - b.meters);
   if (!choices.length) return result("<strong>No stocked dispensers right now.</strong><span>Every dispenser is low, empty, or offline.</span>", true);
@@ -67,25 +79,50 @@ function locationFallback() { $("fallback").hidden = false; result("<strong>Loca
 
 async function urgent() {
   if (!staffMode) return;
-  // Empty dispensers first, then ones running low; oldest alert first within each group.
-  let items = [];
-  const rank = { empty: 0, low: 1 };
-  try {
-    if (usingFallback) throw Error();
-    const r = await fetch(`${apiBase}/staff/alerts`); if (!r.ok) throw Error();
-    // Show each dispenser's current fill, not the fill when the alert was raised.
-    const current = Object.fromEntries(dispensers.map((d) => [d.id, d.fill_percent]));
-    items = (await r.json()).map((a) => ({ level: a.level, building: a.building_name, floor: a.floor, fill: current[a.dispenser_id] ?? a.fill_percent, since: a.created_at }));
-  } catch {
-    items = dispensers.filter((d) => d.status === "empty" || d.status === "low").map((d) => ({ level: d.status, building: d.building.name, floor: d.floor, fill: d.fill_percent, since: d.last_reading_at }));
+  // Only RED (empty) dispensers, one row per floor. Alerts tell us how long each has been empty.
+  const since = {};
+  if (!usingFallback) {
+    try {
+      const r = await fetch(`${apiBase}/staff/alerts`);
+      if (r.ok) (await r.json()).filter((a) => a.level === "empty").forEach((a) => { if (!since[a.dispenser_id] || new Date(a.created_at) < new Date(since[a.dispenser_id])) since[a.dispenser_id] = a.created_at; });
+    } catch { /* no alerts: fall back to the last reading time below */ }
   }
-  items = items.filter((d) => d.level in rank).sort((a, b) => rank[a.level] - rank[b.level] || new Date(a.since) - new Date(b.since));
-  $("urgent-list").innerHTML = items.length ? items.map((d) => `<div class="urgent-item ${d.level}"><strong>${escapeHtml(d.building)}</strong><span>${d.level === "empty" ? "Empty" : "Running low"} · ${escapeHtml(d.floor)} · ${Math.round(d.fill)}% full · since ${timeAgo(d.since)}</span></div>`).join("") : "<p>Everything is stocked right now.</p>";
+  const items = dispensers.filter((d) => d.status === "empty").map((d) => ({
+    building: d.building.name, floor: d.floor, fill: d.fill_percent, since: since[d.id] || d.last_reading_at,
+    meters: staffSort === "closest" && staffLocation ? distance(staffLocation.lat, staffLocation.lng, d.building.lat, d.building.lng) : null,
+  }));
+  const byLongest = (a, b) => new Date(a.since) - new Date(b.since); // empty the longest first
+  items.sort(staffSort === "closest" && staffLocation ? (a, b) => a.meters - b.meters || byLongest(a, b) : byLongest);
+  const note = staffNote ? `<p class="staff-note">${escapeHtml(staffNote)}</p>` : "";
+  $("urgent-list").innerHTML = note + (items.length ? items.map((d) => `<div class="urgent-item empty"><strong>${escapeHtml(d.building)}</strong><span>${escapeHtml(d.floor)} · ${Math.round(d.fill)}% full · empty since ${timeAgo(d.since)}${d.meters != null ? ` · ${distanceText(d.meters)}` : ""}</span></div>`).join("") : "<p>No empty dispensers right now.</p>");
+}
+function syncSortButtons() {
+  [["sort-longest", "longest"], ["sort-closest", "closest"]].forEach(([id, mode]) => { $(id).classList.toggle("active", staffSort === mode); $(id).setAttribute("aria-pressed", String(staffSort === mode)); });
 }
 async function load() { try { const r = await fetch(`${apiBase}/dispensers`); if (!r.ok) throw Error(); dispensers = (await r.json()).map(normalize); usingFallback = false; $("data-source").textContent = "Live data"; } catch { dispensers = fallbackData(); usingFallback = true; $("data-source").textContent = "Demo fallback"; } render(); fillBuildings(); urgent(); }
 
 $("find-btn").addEventListener("click", () => { if (!("geolocation" in navigator)) return locationFallback(); $("find-btn").disabled = true; $("find-btn").textContent = "Finding you…"; navigator.geolocation.getCurrentPosition((p) => { const { latitude, longitude } = p.coords; $("fallback").hidden = true; if (youMarker) map.removeLayer(youMarker); youMarker = L.circleMarker([latitude, longitude], { radius: 8, color: "#fff", weight: 3, fillColor: "#0b3d91", fillOpacity: 1 }).addTo(map).bindTooltip("You are here"); nearest(latitude, longitude, "you"); $("find-btn").disabled = false; $("find-btn").textContent = "Find nearest stocked (15%+)"; }, () => { locationFallback(); $("find-btn").disabled = false; $("find-btn").textContent = "Find nearest stocked (15%+)"; }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }); });
 $("building-select").addEventListener("change", () => { const b = buildings.get($("building-select").value); if (b) nearest(b.lat, b.lng, b.name); });
-$("view-btn").addEventListener("click", () => { if (prompt("Enter staff passcode") !== CONFIG.STAFF_PASSCODE) return; staffMode = true; $("view-btn").hidden = true; $("find-btn").hidden = true; $("staff-panel").hidden = false; urgent(); });
+$("view-btn").addEventListener("click", () => {
+  const code = prompt("Enter staff passcode");
+  if (code === null) return; // they pressed Cancel: do nothing
+  if (code !== CONFIG.STAFF_PASSCODE) return showAlert("Incorrect staff passcode", "Please try again, or keep using Student View.");
+  hideAlert(); clearNearest(); // leave the student's "nearest stocked" result behind
+  staffMode = true; $("view-btn").hidden = true; $("find-btn").hidden = true; $("staff-panel").hidden = false; urgent();
+});
 $("student-btn").addEventListener("click", () => { staffMode = false; $("view-btn").hidden = false; $("find-btn").hidden = false; $("staff-panel").hidden = true; });
+$("sort-longest").addEventListener("click", () => { staffSort = "longest"; staffNote = ""; syncSortButtons(); urgent(); });
+$("sort-closest").addEventListener("click", () => {
+  const btn = $("sort-closest");
+  const done = () => { btn.disabled = false; btn.textContent = "Closest to me"; syncSortButtons(); urgent(); };
+  if (!("geolocation" in navigator)) { staffNote = "This browser can't share location, so showing longest empty first."; staffSort = "longest"; return done(); }
+  btn.disabled = true; btn.textContent = "Locating…";
+  navigator.geolocation.getCurrentPosition(
+    (p) => { staffLocation = { lat: p.coords.latitude, lng: p.coords.longitude }; staffSort = "closest"; staffNote = ""; done(); },
+    () => { staffNote = "Location is off, so showing longest empty first."; staffSort = "longest"; done(); },
+    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
+  );
+});
+$("clear-result").addEventListener("click", clearNearest);
+syncSortButtons();
 load(); setInterval(load, CONFIG.POLL_INTERVAL_MS);
