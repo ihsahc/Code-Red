@@ -1,7 +1,9 @@
 """Logic shared by several endpoints: recording readings, raising alerts,
 and turning database rows into API responses."""
 
+import hashlib
 import math
+from datetime import timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -19,6 +21,29 @@ from app.status import (
     units_left,
 )
 from app.timeutil import to_utc, utcnow
+
+
+MAX_DEMO_STREAK_DAYS = 31
+
+
+def is_simulated(d: Dispenser) -> bool:
+    """True for the demo dispensers; False for the real Pico W box."""
+    return not d.is_real and d.id != config.REAL_DISPENSER_ID
+
+
+def demo_streak_days(dispenser_id: str) -> int:
+    """A made-up but stable streak length (1-31 days) for a simulated dispenser.
+
+    Real streaks only grow one day per day, so a fresh demo would show 0 everywhere.
+    Hashing the ID gives each simulated dispenser its own believable history that
+    stays the same across restarts.
+    """
+    return int(hashlib.sha256(dispenser_id.encode()).hexdigest(), 16) % MAX_DEMO_STREAK_DAYS + 1
+
+
+def demo_streak_start(dispenser_id: str, now):
+    """When a simulated dispenser's made-up streak began."""
+    return now - timedelta(days=demo_streak_days(dispenser_id), hours=3)
 
 
 def counts_by_level(d: Dispenser) -> bool:
@@ -138,10 +163,13 @@ def record_reading(
         db.add(Alert(dispenser_id=d.id, level=Status.LOW, fill_percent=new_pct, created_at=at))
 
     # Streaks: going empty breaks the streak; the next non-empty reading starts a new one.
+    # The simulator keeps emptying and refilling the demo dispensers, which would
+    # leave every demo streak at 0, so their new streaks are back-dated to their
+    # stable made-up length (as at startup). The real box's streak is genuine.
     if new_status == Status.EMPTY:
         d.streak_started_at = None
     elif d.streak_started_at is None:
-        d.streak_started_at = at
+        d.streak_started_at = demo_streak_start(d.id, at) if config.SEED_DEMO_DATA and is_simulated(d) else at
 
     d.last_distance_mm = distance_mm
     d.last_fill_percent = new_pct

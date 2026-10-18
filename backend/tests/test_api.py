@@ -421,6 +421,22 @@ def test_streak_breaks_when_empty_and_restarts_on_refill(client):
     assert d["streak_days"] == 0 and d["streak_started_at"] is not None
 
 
+def test_demo_streaks_survive_the_simulator_emptying_and_refilling(client, monkeypatch):
+    from app.services import demo_streak_days
+
+    monkeypatch.setattr(config_module(), "SEED_DEMO_DATA", True)
+    send(client, "near", EMPTY_MM, "k1")  # simulator empties a demo dispenser: 0 while empty
+    assert client.get("/dispensers/near").json()["streak_days"] == 0
+    send(client, "near", FULL_MM, "k1")  # refilled: back to its made-up streak, not 0
+    assert client.get("/dispensers/near").json()["streak_days"] == demo_streak_days("near")
+
+    with next(app.dependency_overrides[get_db]()) as db:
+        db.get(Dispenser, "far").is_real = True
+        db.commit()
+    send(client, "far", FULL_MM, "k2")  # the real box's streak is genuine
+    assert client.get("/dispensers/far").json()["streak_days"] == 0
+
+
 def test_demo_streaks_are_stable_and_skip_real_and_empty(monkeypatch):
     from app import seed as seed_mod
 
@@ -459,4 +475,10 @@ def test_old_long_demo_streaks_are_rerolled_into_range(monkeypatch):
         seed_mod.sync_demo_data(db)
         days = (utcnow() - db.get(Dispenser, "a").streak_started_at).days
         assert 1 <= days <= 31
+
+        db.get(Dispenser, "a").streak_started_at = utcnow() - timedelta(hours=2)  # reset by the simulator
+        db.commit()
+        seed_mod.sync_demo_data(db)
+        days = (utcnow() - db.get(Dispenser, "a").streak_started_at).days
+        assert days == seed_mod.demo_streak_days("a")
     assert all(1 <= seed_mod.demo_streak_days(f"id{i}") <= 31 for i in range(500))

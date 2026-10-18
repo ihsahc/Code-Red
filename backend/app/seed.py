@@ -14,7 +14,6 @@ can report for every dispenser. Give real devices random keys instead.
 """
 
 import argparse
-import hashlib
 from datetime import timedelta
 
 from sqlalchemy import delete, select
@@ -23,7 +22,13 @@ from sqlalchemy.orm import Session
 from app import config
 from app.database import Base, SessionLocal, engine
 from app.models import Alert, Building, Dispenser, Reading
-from app.services import record_reading
+from app.services import (  # noqa: F401  (MAX_DEMO_STREAK_DAYS, demo_streak_days used by tests)
+    MAX_DEMO_STREAK_DAYS,
+    demo_streak_days,
+    demo_streak_start,
+    is_simulated,
+    record_reading,
+)
 from app.timeutil import utcnow
 
 DISPENSERS = [
@@ -128,34 +133,22 @@ def _add_starting_readings(db: Session, d: Dispenser, distance: float | None) ->
         record_reading(db, d, distance, 3.8, at=now - timedelta(seconds=30))
 
 
-MAX_DEMO_STREAK_DAYS = 31
-
-
-def demo_streak_days(dispenser_id: str) -> int:
-    """A made-up but stable streak length (1-31 days) for a simulated dispenser.
-
-    Real streaks only grow one day per day, so a fresh demo would show 0 everywhere.
-    Hashing the ID gives each simulated dispenser its own believable history that
-    stays the same across restarts.
-    """
-    return int(hashlib.sha256(dispenser_id.encode()).hexdigest(), 16) % MAX_DEMO_STREAK_DAYS + 1
-
-
 def _give_demo_streak(d: Dispenser, new: bool) -> None:
     """Back-date a simulated dispenser's streak so the staff view has history to show.
 
     Only for simulated dispensers that aren't empty. New ones always get one; existing
-    ones get one if they have none yet, or if theirs is longer than the demo range
-    (e.g. left over from an older, wider range). The real box's streak is always genuine.
+    ones get one if they have none yet, if theirs is longer than the demo range
+    (e.g. left over from an older, wider range), or if it's under a day (reset by the
+    simulator before refills were back-dated). The real box's streak is always genuine.
     """
-    if d.is_real or d.id == config.REAL_DISPENSER_ID:
+    if not is_simulated(d):
         return
     if d.last_fill_percent is None or d.last_fill_percent < config.EMPTY_BELOW_PERCENT:
         return
     now = utcnow()
-    too_long = d.streak_started_at is not None and (now - d.streak_started_at).days > MAX_DEMO_STREAK_DAYS
-    if new or d.streak_started_at is None or too_long:
-        d.streak_started_at = now - timedelta(days=demo_streak_days(d.id), hours=3)
+    days = None if d.streak_started_at is None else (now - d.streak_started_at).days
+    if new or days is None or days > MAX_DEMO_STREAK_DAYS or days < 1:
+        d.streak_started_at = demo_streak_start(d.id, now)
 
 
 def sync_demo_data(db: Session) -> dict[str, int]:
