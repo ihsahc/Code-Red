@@ -90,6 +90,20 @@ def test_reading_updates_dispenser(client):
     assert d["status"] == "low" and d["fill_percent"] == 50.0 and d["units_left"] == 10
 
 
+def test_reading_uses_device_fill_percent(client):
+    # 225 mm would work out to 50%, but the device's own fill % wins.
+    r = client.post(
+        "/readings",
+        json={"dispenser_id": "near", "distance_mm": 225, "fill_percent": 84.6},
+        headers={"X-Device-Key": "k1"},
+    )
+    assert r.json() == {"dispenser_id": "near", "fill_percent": 84.6, "status": "full"}
+    assert client.get("/dispensers/near").json()["fill_percent"] == 84.6
+    assert client.get("/dispensers/near/history").json()[-1]["fill_percent"] == 84.6
+    bad = {"dispenser_id": "near", "distance_mm": 225, "fill_percent": 101}
+    assert client.post("/readings", json=bad, headers={"X-Device-Key": "k1"}).status_code == 422
+
+
 def test_never_reported_shows_offline(client):
     assert client.get("/dispensers/far").json()["status"] == "offline"
 
@@ -199,7 +213,10 @@ def test_sync_warns_without_key(monkeypatch):
         assert db.get(Dispenser, "pico").device_key == "demo-pico"
 
 
-def test_real_dispenser_reading_uses_its_calibration(client):
+def test_real_dispenser_straight_line_fallback(client, monkeypatch):
+    from app import config
+
+    monkeypatch.setattr(config, "REAL_LEVELS_MM", [])  # REAL_LEVELS_MM="" on Render
     with next(app.dependency_overrides[get_db]()) as db:
         d = db.get(Dispenser, "near")
         d.is_real, d.empty_distance_mm, d.full_distance_mm = True, 155, 40
@@ -209,6 +226,58 @@ def test_real_dispenser_reading_uses_its_calibration(client):
     out = client.get("/dispensers/near").json()
     assert out["real"] is True and out["units_left"] == 3  # 50% of (155-40)/18 ≈ 3
     assert client.get("/dispensers/far").json()["real"] is False
+
+
+# Every steady reading from the Oct 18 calibration run (inches, as logged on the
+# Pico), lowest and highest, with how many tampons were in the box.
+CALIBRATION_RUN_IN = [
+    (13, 0.55, 0.70),
+    (12, 1.29, 1.37),
+    (11, 2.00, 2.12),
+    (10, 2.71, 2.79),
+    (9, 3.46, 3.54),
+    (8, 4.09, 4.17),
+    (7, 4.68, 4.76),
+    (6, 5.19, 5.23),  # column just emptied
+    (6, 5.00, 5.11),  # "6 or fewer": the sensor only sees the tray now
+]
+
+
+def test_units_from_levels_matches_calibration_run():
+    from app import config
+    from app.status import units_from_levels
+
+    for expected, low_in, high_in in CALIBRATION_RUN_IN:
+        for inches in (low_in, high_in):
+            got = units_from_levels(
+                inches * 25.4, config.REAL_LEVELS_MM, config.REAL_COLUMN_EMPTY_MM, config.REAL_CAPACITY
+            )
+            assert got == expected, f"{inches} in should be {expected} left, got {got}"
+
+
+def test_real_dispenser_counts_by_level(client):
+    with next(app.dependency_overrides[get_db]()) as db:
+        db.get(Dispenser, "near").is_real = True
+        db.commit()
+
+    def reading(mm):
+        r = send(client, "near", mm, "k1").json()
+        out = client.get("/dispensers/near").json()
+        return r["fill_percent"], r["status"], out["units_left"]
+
+    assert reading(15.0) == (100.0, "full", 13)
+    assert reading(88.9) == (69.2, "full", 9)
+    assert reading(120.4) == (53.8, "full", 7)
+    assert client.get("/staff/alerts").json() == []
+    # Column empty: "6 or fewer", which raises a low alert for staff.
+    assert reading(127.8) == (46.2, "low", 6)
+    assert [a["level"] for a in client.get("/staff/alerts").json()] == ["low"]
+    # Refilled: back to 13, alert resolved, refill recorded.
+    assert reading(15.0) == (100.0, "full", 13)
+    assert client.get("/staff/alerts").json() == []
+    assert client.get("/dispensers/near").json()["last_refill_at"] is not None
+    # Simulated dispensers still use the straight line.
+    assert send(client, "far", LOW_MM, "k2").json()["fill_percent"] == 50
 
 
 def test_add_missing_columns_upgrades_old_database():

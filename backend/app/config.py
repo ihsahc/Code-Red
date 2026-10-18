@@ -18,6 +18,11 @@ def _get_bool(name: str, default: bool) -> bool:
     return os.getenv(name, str(default)).strip().lower() in {"1", "true", "yes"}
 
 
+def _get_floats(name: str, default: str) -> list[float]:
+    """A comma-separated list of numbers, e.g. "15,32.8,52.8". Empty = []."""
+    return [float(x) for x in os.getenv(name, default).replace(" ", "").split(",") if x]
+
+
 def _database_url() -> str:
     url = os.getenv("DATABASE_URL", "sqlite:///./dispensers.db")
     # Render hands out URLs starting with "postgres://" or "postgresql://".
@@ -48,10 +53,25 @@ PRODUCT_THICKNESS_MM = _get_float("PRODUCT_THICKNESS_MM", 18)
 # box is 15.5 cm tall, so it has its own calibration. Change these on Render
 # (code-red-api -> Environment) once you've measured it; no code change needed.
 REAL_DISPENSER_ID = os.getenv("REAL_DISPENSER_ID", "klaus-atrium-pico-w")
+
+# The real box is counted level by level, from readings measured on it
+# (Oct 18 calibration run, converted from inches). Its sensor reading doesn't
+# grow evenly as tampons are taken, and once the column empties the sensor can
+# only see the tray, so a straight line from "full" to "empty" gives wrong counts.
+# How many tampons a full box holds.
+REAL_CAPACITY = int(_get_float("REAL_CAPACITY", 13))
+# Sensor reading in mm with a FULL box first, then one fewer tampon per step,
+# down to the last level the sensor can see (here 13 left ... 7 left).
+# Set it to "" on Render to go back to the straight-line formula below.
+REAL_LEVELS_MM = _get_floats("REAL_LEVELS_MM", "15,32.8,52.8,69.9,88.9,104.9,120.4")
+# At or beyond this reading the column is empty: the box reports
+# REAL_CAPACITY - len(REAL_LEVELS_MM) left (here "6 or fewer", status "low").
+REAL_COLUMN_EMPTY_MM = _get_float("REAL_COLUMN_EMPTY_MM", 124.5)
+
+# Straight-line calibration, used only when REAL_LEVELS_MM is empty.
 # Sensor reading with the box EMPTY (roughly the 155 mm box height).
 REAL_EMPTY_DISTANCE_MM = _get_float("REAL_EMPTY_DISTANCE_MM", 155)
-# Sensor reading with the box FULL. The VL53L0X is unreliable under ~30 mm,
-# so keep the top of a full stack at least 3-4 cm below the sensor.
+# Sensor reading with the box FULL.
 REAL_FULL_DISTANCE_MM = _get_float("REAL_FULL_DISTANCE_MM", 40)
 # Secret key the Pico W sends with each reading. Set it on Render only;
 # never commit it. If unset, the box keeps its guessable demo key.

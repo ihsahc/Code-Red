@@ -65,6 +65,11 @@ days so the demo has history; the real dispenser's streak is always genuine.
 dispenser is simulated. The frontend can use it for the "Live dispenser" badge
 instead of hard-coding the ID.
 
+For the real dispenser, `units_left` is an exact count from 13 down to 7. Below
+that its sensor can only see the tray, so it reports `units_left: 6` with status
+`low`, meaning **"6 or fewer"** (show it that way if you can). It never reports
+`empty`, because the sensor can't tell when the tray runs out.
+
 Several dispensers can share a building (and so the same coordinates). On the
 map, group them into one pin per building and list the dispensers by floor
 when the pin is tapped.
@@ -181,8 +186,12 @@ frontend never calls this.
 Header: `X-Device-Key: <the dispenser's secret>`
 
 ```json
-{ "dispenser_id": "klaus-atrium-pico-w", "distance_mm": 300, "battery_v": 3.8 }
+{ "dispenser_id": "klaus-atrium-pico-w", "distance_mm": 104.9, "fill_percent": 61.5, "battery_v": 3.8 }
 ```
+
+`fill_percent` (0–100) is optional. The real Pico W works it out itself and
+sends it, and the server saves it as is. If it is left out (the simulated
+dispensers), the server works it out from `distance_mm`.
 
 Returns `201` with `{ "dispenser_id": "klaus-atrium-pico-w", "fill_percent": 27.8, "status": "low" }`,
 or `401` if the ID or key is wrong.
