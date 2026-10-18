@@ -18,6 +18,9 @@ const CONFIG = {
   // Status cutoffs (fill percentage)
   GREEN_ABOVE: 50, // more than 50%  -> green
   STOCKED_MIN: 15, // 15% to 50%     -> yellow, below 15% -> red
+  // The sensor isn't reliable at or below this fill %, so the site shows
+  // "Running lower" there instead of a number.
+  EXACT_PERCENT_ABOVE: 30,
 
   // Where the map starts (Georgia Tech campus) and how zoomed in it is.
   MAP_CENTER: [33.7756, -84.3985],
