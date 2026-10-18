@@ -31,8 +31,8 @@ function timeAgo(iso) { if (!iso) return "never"; const s = Math.max(0, Math.rou
 function distance(a, b, c, d) { const r = (n) => n * Math.PI / 180, h = Math.sin(r(c - a) / 2) ** 2 + Math.cos(r(a)) * Math.cos(r(c)) * Math.sin(r(d - b) / 2) ** 2; return 12742000 * Math.asin(Math.sqrt(h)); }
 function distanceText(m) { return `${m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(1)} km`} away (about ${Math.max(1, Math.round(m / CONFIG.WALK_METERS_PER_MIN))} min walk)`; }
 
-// Stable made-up streak (1-60 days) for demo data, matching how the backend fakes them.
-function demoStreak(id) { let h = 0; for (const c of id) h = (h * 31 + c.charCodeAt(0)) >>> 0; return (h % 60) + 1; }
+// Stable made-up streak (1-31 days) for demo data, matching how the backend fakes them.
+function demoStreak(id) { let h = 0; for (const c of id) h = (h * 31 + c.charCodeAt(0)) >>> 0; return (h % 31) + 1; }
 function fallbackData() {
   const now = Date.now();
   return DISPENSERS.map((d) => {

@@ -40,7 +40,15 @@ DISPENSERS = [
     ("p264520-f3", "Gilbert Memorial Library", "Floor 3", "Women's restroom", 33.774426, -84.395790, 330),
     ("p264520-f4", "Gilbert Memorial Library", "Floor 4", "Women's restroom", 33.774426, -84.395790, 368),
     ("p264520-f5", "Gilbert Memorial Library", "Floor 5", "Women's restroom", 33.774426, -84.395790, 208),
-    ("klaus-atrium-pico-w", "Klaus Advanced Computing Building", "Atrium", "Women's restroom in the Klaus atrium", 33.777524, -84.396128, 208),
+    (
+        "klaus-atrium-pico-w",
+        "Klaus Advanced Computing Building",
+        "Atrium",
+        "Women's restroom in the Klaus atrium",
+        33.777524,
+        -84.396128,
+        208,
+    ),
     ("klaus-f2", "Klaus Advanced Computing Building", "Floor 2", "Women's restroom", 33.777524, -84.396128, 292),
     ("klaus-f3", "Klaus Advanced Computing Building", "Floor 3", "Women's restroom", 33.777524, -84.396128, 351),
     ("klaus-f4", "Klaus Advanced Computing Building", "Floor 4", "Women's restroom", 33.777524, -84.396128, 400),
@@ -120,28 +128,34 @@ def _add_starting_readings(db: Session, d: Dispenser, distance: float | None) ->
         record_reading(db, d, distance, 3.8, at=now - timedelta(seconds=30))
 
 
+MAX_DEMO_STREAK_DAYS = 31
+
+
 def demo_streak_days(dispenser_id: str) -> int:
-    """A made-up but stable streak length (1-60 days) for a simulated dispenser.
+    """A made-up but stable streak length (1-31 days) for a simulated dispenser.
 
     Real streaks only grow one day per day, so a fresh demo would show 0 everywhere.
     Hashing the ID gives each simulated dispenser its own believable history that
     stays the same across restarts.
     """
-    return int(hashlib.sha256(dispenser_id.encode()).hexdigest(), 16) % 60 + 1
+    return int(hashlib.sha256(dispenser_id.encode()).hexdigest(), 16) % MAX_DEMO_STREAK_DAYS + 1
 
 
 def _give_demo_streak(d: Dispenser, new: bool) -> None:
     """Back-date a simulated dispenser's streak so the staff view has history to show.
 
-    Only for simulated dispensers that aren't empty and don't have a streak from an
-    earlier run (new ones always get one). The real box's streak is always genuine.
+    Only for simulated dispensers that aren't empty. New ones always get one; existing
+    ones get one if they have none yet, or if theirs is longer than the demo range
+    (e.g. left over from an older, wider range). The real box's streak is always genuine.
     """
     if d.is_real or d.id == config.REAL_DISPENSER_ID:
         return
     if d.last_fill_percent is None or d.last_fill_percent < config.EMPTY_BELOW_PERCENT:
         return
-    if new or d.streak_started_at is None:
-        d.streak_started_at = utcnow() - timedelta(days=demo_streak_days(d.id), hours=3)
+    now = utcnow()
+    too_long = d.streak_started_at is not None and (now - d.streak_started_at).days > MAX_DEMO_STREAK_DAYS
+    if new or d.streak_started_at is None or too_long:
+        d.streak_started_at = now - timedelta(days=demo_streak_days(d.id), hours=3)
 
 
 def sync_demo_data(db: Session) -> dict[str, int]:

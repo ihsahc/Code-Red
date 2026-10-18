@@ -368,10 +368,26 @@ def test_demo_streaks_are_stable_and_skip_real_and_empty(monkeypatch):
         now = utcnow()
         stocked = db.get(Dispenser, "stocked")
         days = (now - stocked.streak_started_at).days
-        assert days == seed_mod.demo_streak_days("stocked") and 1 <= days <= 60
+        assert days == seed_mod.demo_streak_days("stocked") and 1 <= days <= 31
         assert db.get(Dispenser, "empty").streak_started_at is None
         assert db.get(Dispenser, "pico").streak_started_at is None  # real box: no fake history
 
         first = stocked.streak_started_at
         seed_mod.sync_demo_data(db)  # restart: existing streaks untouched
         assert db.get(Dispenser, "stocked").streak_started_at == first
+
+
+def test_old_long_demo_streaks_are_rerolled_into_range(monkeypatch):
+    from app import seed as seed_mod
+
+    monkeypatch.setattr(config_module(), "REAL_DISPENSER_ID", "pico")
+    monkeypatch.setattr(seed_mod, "DISPENSERS", [("a", "Klaus", "1", "", 33.7, -84.3, 100)])
+    _, Session = make_db()
+    with Session() as db:
+        seed_mod.sync_demo_data(db)
+        db.get(Dispenser, "a").streak_started_at = utcnow() - timedelta(days=55)  # from the old 1-60 range
+        db.commit()
+        seed_mod.sync_demo_data(db)
+        days = (utcnow() - db.get(Dispenser, "a").streak_started_at).days
+        assert 1 <= days <= 31
+    assert all(1 <= seed_mod.demo_streak_days(f"id{i}") <= 31 for i in range(500))
