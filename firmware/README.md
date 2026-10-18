@@ -52,12 +52,13 @@ Each line is the latest reading in inches and what the Pico thinks is in the box
 |---|---|---|
 | `13 left (100% full)` … `7 left (54% full)` | Exact count | Yes |
 | `LOW: 6 or fewer left, refill soon` | The column is empty; the sensor can only see the tray | Yes, as 23.1% (below 25%, "low", 3 left) |
+| `… [closest level]` | The reading settled between two levels (a tilted tampon, a shifted lid); it counts as the closest one instead of an error | Yes |
 | `LID OPEN: put the lid back on` | Nothing in range (the sensor reports 8190 mm) | No |
-| `ERROR: … doesn't match any tampon level` | The reading settled between levels: lid or sensor shifted, or a tampon is tilted | No |
 
-It sends whenever the count changes and every `REPORT_EVERY_SECONDS` otherwise.
-While nothing is sent (lid open, error), the map shows the box as **offline**
-after 2 minutes.
+It never shows an error for a reading: anything between levels counts as the
+closest one. It sends whenever the count changes and every `REPORT_EVERY_SECONDS`
+otherwise. While the lid is open nothing is sent, and if that lasts 2 minutes
+the map shows the box as **offline**.
 
 ## Calibrating
 

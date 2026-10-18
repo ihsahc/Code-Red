@@ -183,7 +183,8 @@ TOTAL = 13
 # shifts some levels by up to 0.36 in between runs, so each band covers every
 # steady reading from both runs plus 0.1 in.
 # (tampons left, lowest OK reading, highest OK reading) in inches
-# A reading that settles in a gap between bands = something is misaligned
+# Failsafe: a reading that settles between two bands (or closer than the first)
+# counts as the closest level instead of an error.
 BANDS = [
     (13, 0.40, 0.85),  # seen 0.51-0.70
     (12, 1.12, 1.47),  # seen 1.22-1.37
@@ -193,7 +194,6 @@ BANDS = [
     (8, 3.91, 4.27),  # seen 4.01-4.17
     (7, 4.58, 4.80),  # seen 4.68-4.76
 ]
-TOO_CLOSE = 0.40  # closer than this: something is touching/blocking the sensor
 # 4.80 to 6.00: the column is empty, 6 or fewer left in the tray. Seen: 5.07-5.23
 # right after the column empties, then 4.84-5.11 once the last ones settle.
 LOW_ZONE = 4.80
@@ -208,15 +208,27 @@ def read_inches():
     return r[1] / 25.4
 
 
-def match(d):
-    if d < TOO_CLOSE:
-        return "ERR"
+STICKY = 0.10  # in; between two levels, stay on the current one unless another is this much closer
+
+
+def match(d, current=None):
+    """Tampons left for a settled reading (or "LOW"), and whether it was inside a band.
+
+    Never fails: a reading between two bands counts as the closest one. If that
+    is a close call, it stays on `current` so the count doesn't flicker.
+    """
     if d >= LOW_ZONE:
-        return "LOW"
+        return "LOW", True
+    closest, closest_gap = None, None
     for count, lo, hi in BANDS:
         if lo <= d <= hi:
-            return count
-    return "ERR"  # settled between bands = misaligned
+            return count, True
+        gap = lo - d if d < lo else d - hi
+        if count == current:
+            gap -= STICKY
+        if closest_gap is None or gap < closest_gap:
+            closest, closest_gap = count, gap
+    return closest, False
 
 
 # --- Wi-Fi and the website --------------------------------------------------
@@ -330,6 +342,7 @@ last_try_status = None  # what the status was then
 # Once the column has emptied, stay LOW until a refill (8 or more): the bottom
 # reading sits close to the "7 left" level, and 6-or-fewer can't become 7 by itself.
 low_latched = False
+current = None  # the count currently shown (keeps "closest level" from flickering)
 
 while True:
     d = read_inches()
@@ -347,34 +360,29 @@ while True:
         settled = len(recent) == STABLE_N and max(recent) - min(recent) <= STABLE_SPREAD
         if settled:
             avg = sum(recent) / STABLE_N
-            result = match(avg)
+            result, exact = match(avg, current)
 
             if result == "LOW":
                 low_latched = True
             elif result == 7 and low_latched:
                 result = "LOW"  # still low: no refill has happened
-            elif result != "ERR":
+            else:
                 low_latched = False  # 8 or more: refilled
 
-            if result == "ERR":
-                # Works at any fill level, including right after power-on
-                good_mm = None
-                status = (
-                    f"ERROR: {avg:.2f} in doesn't match any tampon level. "
-                    "Lid or sensor shifted, or a tampon is tilted. Fix and it will clear."
-                )
+            current = result
+            good_mm = round(avg * 25.4, 1)
+            good_pct = fill_percent(result)
+            if result == "LOW":
+                status = "LOW: 6 or fewer left, refill soon"
             else:
-                good_mm = round(avg * 25.4, 1)
-                good_pct = fill_percent(result)
-                if result == "LOW":
-                    status = "LOW: 6 or fewer left, refill soon"
-                else:
-                    status = f"{result} left ({good_pct}% full)"
+                status = f"{result} left ({good_pct}% full)"
+            if not exact:
+                status += " [closest level]"
 
     print(f"{d:.2f} in -> {status}")
 
     # Send when the count changes, and every few seconds so the map doesn't
-    # mark the box offline. Errors and an open lid are never sent.
+    # mark the box offline. Nothing is sent while the lid is open.
     now = time.monotonic()
     due = last_try is None or status != last_try_status or now - last_try >= REPORT_EVERY_SECONDS
     if good_mm is not None and due and not CALIBRATE:
