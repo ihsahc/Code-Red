@@ -1,26 +1,39 @@
 /* style.css — how everything looks.
-   All colors live in :root below. To restyle the app later, edit these values. */
+   2016 summer theme: Instagram's purple-pink gradient, bright summer colors,
+   and emoji status icons. All colors live in :root below. */
 
 :root {
-  /* Status colors */
-  --green: #2e9e57;
-  --yellow: #f2b705;
-  --red: #d93a3a;
-  --gray: #8a8f98;
+  /* Summer palette */
+  --pink: #ff5a8e;
+  --coral: #ff8a5b;
+  --lime: #e2e300;
+  --cyan: #00dede;
+  --teal: #00bdb0;
+
+  /* Status colors (each status also has its own emoji, so color isn't the only cue) */
+  --full: var(--teal);
+  --low: var(--lime);
+  --empty: var(--pink);
+  --offline: #a7a3b5;
+
+  /* The 2016 Instagram gradient */
+  --insta: linear-gradient(120deg, #833ab4 0%, #c13584 40%, #e1306c 65%, #fd5949 85%, #f77737 100%);
+  --insta-soft: linear-gradient(120deg, #f3e8ff 0%, #ffe3f0 55%, #ffeadd 100%);
 
   /* App colors */
   --bg: #ffffff;
-  --text: #1c1f24;
-  --muted: #5c636d;
-  --accent: #0b3d91;
+  --text: #2a1f3d;
+  --muted: #6f6585;
+  --accent: #c13584;
   --accent-text: #ffffff;
-  --border: #dde1e6;
+  --border: #f1d9ea;
   --panel-bg: #ffffff;
-  --highlight: #0b3d91;
+  --highlight: #833ab4;
 
   /* Fonts and shapes */
-  --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --radius: 12px;
+  --font: Roboto, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --logo-font: "Pacifico", "Brush Script MT", cursive;
+  --radius: 16px;
 }
 
 * { box-sizing: border-box; }
@@ -44,27 +57,61 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 14px;
-  background: var(--accent);
+  padding: 8px 14px;
+  background: var(--insta);
   color: var(--accent-text);
+  box-shadow: 0 2px 10px rgba(131, 58, 180, 0.35);
+  z-index: 1000; /* keep the shadow above the map */
 }
-.topbar h1 { margin: 0; font-size: 1.1rem; }
+.topbar h1 {
+  margin: 0;
+  font-family: var(--logo-font);
+  font-weight: 400;
+  font-size: 1.6rem;
+  line-height: 1.2;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
 .view-tag {
   font-size: 0.75rem;
-  padding: 3px 10px;
+  font-weight: 600;
+  padding: 5px 12px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.45);
 }
 .header-actions { display: flex; align-items: center; gap: 8px; }
-.data-source { font-size: 0.72rem; opacity: 0.9; }
-button.view-tag { border: 0; color: inherit; cursor: pointer; font-family: inherit; }
+.data-source { font-size: 0.72rem; opacity: 0.95; }
+button.view-tag { color: inherit; cursor: pointer; font-family: inherit; }
 
 #map { flex: 1; min-height: 0; }
 
+/* The "filter": app.js lays a purple-pink-orange gradient over the map tiles
+   (under the pins), and this blends it in like an Instagram photo filter.
+   Raise the opacity for a stronger filter, lower it for a subtler one. */
+.leaflet-instaFilter-pane {
+  mix-blend-mode: soft-light;
+  opacity: 0.85;
+  pointer-events: none;
+}
+.leaflet-tile-pane { filter: saturate(1.15) contrast(1.03); }
+
 .panel {
-  padding: 10px 14px 14px;
+  position: relative;
+  max-height: 55dvh; /* long staff lists scroll instead of pushing the map off screen */
+  overflow-y: auto;
+  padding: 12px 14px 14px;
   background: var(--panel-bg);
-  border-top: 1px solid var(--border);
+  box-shadow: 0 -4px 14px rgba(131, 58, 180, 0.12);
+}
+/* Thin gradient stripe along the top of the panel */
+.panel::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, var(--pink), var(--coral), var(--lime), var(--cyan), var(--teal));
 }
 
 /* Legend */
@@ -80,48 +127,50 @@ button.view-tag { border: 0; color: inherit; cursor: pointer; font-family: inher
 }
 .legend li { display: flex; align-items: center; gap: 6px; }
 
-/* Colored circle with a symbol inside (used in legend and on the map).
-   The symbol means colorblind users don't have to rely on color alone. */
+/* Colored circle with an emoji inside (used in the legend, popups and on the map). */
 .dot, .pin {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   border: 2px solid #fff;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
-  color: #fff;
-  font-weight: 700;
-  font-size: 13px;
+  box-shadow: 0 2px 6px rgba(42, 31, 61, 0.35);
+  font-size: 14px;
   line-height: 1;
 }
-.green  { background: var(--green); }
-.yellow { background: var(--yellow); color: #1c1f24; }
-.red    { background: var(--red); }
-.gray   { background: var(--gray); }
+.st-full    { background: var(--full); }
+.st-low     { background: var(--low); }
+.st-empty   { background: var(--empty); }
+.st-offline { background: var(--offline); }
 
-/* Map pins are a bit bigger so they're easy to tap */
-.pin { width: 30px; height: 30px; font-size: 17px; }
+/* Map pins are bigger so they're easy to tap */
+.pin { width: 34px; height: 34px; font-size: 19px; border-width: 3px; }
 .pin.highlight {
   outline: 3px solid var(--highlight);
   outline-offset: 2px;
-  transform: scale(1.15);
+  transform: scale(1.18);
 }
 
 /* Buttons and inputs: big enough for thumbs */
 button.primary {
   width: 100%;
-  min-height: 48px;
+  min-height: 50px;
   border: 0;
-  border-radius: var(--radius);
-  background: var(--accent);
+  border-radius: 999px;
+  background: var(--insta);
   color: var(--accent-text);
+  font-family: inherit;
   font-size: 1rem;
-  font-weight: 600;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  box-shadow: 0 4px 14px rgba(193, 53, 132, 0.35);
   cursor: pointer;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
 }
-button.primary:disabled { opacity: 0.6; cursor: wait; }
+button.primary:active { transform: translateY(1px); box-shadow: 0 2px 8px rgba(193, 53, 132, 0.35); }
+button.primary:disabled { opacity: 0.7; cursor: wait; }
 
 .fallback { margin-top: 10px; font-size: 0.9rem; }
 .fallback label { display: block; margin-bottom: 4px; color: var(--muted); }
@@ -130,7 +179,7 @@ button.primary:disabled { opacity: 0.6; cursor: wait; }
   min-height: 44px;
   padding: 0 10px;
   font-size: 1rem;
-  border: 1px solid var(--border);
+  border: 2px solid var(--border);
   border-radius: var(--radius);
   background: var(--bg);
   color: var(--text);
@@ -139,12 +188,13 @@ button.primary:disabled { opacity: 0.6; cursor: wait; }
 .result {
   margin-top: 10px;
   padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-left: 5px solid var(--green);
+  border: 0;
+  border-left: 6px solid var(--teal);
   border-radius: var(--radius);
+  background: #e6fbf9;
   font-size: 0.95rem;
 }
-.result.warn { border-left-color: var(--red); }
+.result.warn { border-left-color: var(--pink); background: #fff0f5; }
 .result strong { display: block; }
 .result span { color: var(--muted); font-size: 0.85rem; }
 
@@ -157,15 +207,16 @@ button.primary:disabled { opacity: 0.6; cursor: wait; }
 #staff-panel { margin-top: 10px; }
 .staff-heading { display: flex; align-items: center; justify-content: space-between; }
 .staff-help { margin: 4px 0 8px; color: var(--muted); font-size: 0.85rem; }
-.text-button { border: 0; background: none; color: var(--accent); font: inherit; font-weight: 600; cursor: pointer; }
+.text-button { border: 0; background: none; color: var(--accent); font: inherit; font-weight: 700; cursor: pointer; }
 .urgent-list { display: grid; gap: 6px; }
 .urgent-list p { margin: 0; color: var(--muted); font-size: 0.9rem; }
-.urgent-item { padding: 8px 10px; border-left: 4px solid var(--red); background: #fff4f4; border-radius: 6px; }
-.urgent-item.low { border-left-color: var(--yellow); background: #fffbea; }
+.urgent-item { padding: 8px 10px; border-left: 5px solid var(--pink); background: #fff0f5; border-radius: 10px; }
+.urgent-item.low { border-left-color: var(--lime); background: #fdfde0; }
 .urgent-item strong, .urgent-item span { display: block; }
 .urgent-item span { color: var(--muted); font-size: 0.82rem; }
 
 /* Popup that opens when you tap a pin */
+.leaflet-popup-content-wrapper { border-radius: var(--radius); box-shadow: 0 6px 20px rgba(131, 58, 180, 0.25); }
 .popup h3 { margin: 0 0 4px; font-size: 1rem; }
 .popup p { margin: 2px 0; font-size: 0.85rem; }
 .badge {
@@ -173,12 +224,12 @@ button.primary:disabled { opacity: 0.6; cursor: wait; }
   margin-top: 6px;
   padding: 2px 8px;
   font-size: 0.7rem;
-  font-weight: 600;
+  font-weight: 700;
   border-radius: 999px;
-  background: var(--border);
+  background: var(--insta-soft);
   color: var(--muted);
 }
-.badge.real { background: #dff3e6; color: #176b35; }
+.badge.real { background: var(--teal); color: #fff; }
 
 /* Remove Leaflet's default white box around our custom pins */
 .leaflet-div-icon { background: transparent; border: 0; }
@@ -186,25 +237,26 @@ button.primary:disabled { opacity: 0.6; cursor: wait; }
 /* Floor-by-floor list inside a building popup */
 .floor-list { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; }
 .floor-row { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; }
-.floor-row .dot { width: 18px; height: 18px; font-size: 11px; flex: none; }
+.floor-row .dot { width: 22px; height: 22px; font-size: 12px; flex: none; }
 .floor-row .floor-name { flex: 1; }
 .floor-row .floor-pct { color: var(--muted); white-space: nowrap; }
 .popup .hint { color: var(--muted); font-size: 0.75rem; }
+
 /* Staff sort toggle: "Longest empty" / "Closest to me" */
-.sort-toggle { display: flex; gap: 0; margin: 0 0 8px; border: 1px solid var(--accent); border-radius: 999px; overflow: hidden; }
-.sort-button { flex: 1; min-height: 40px; padding: 0 12px; border: 0; background: var(--bg); color: var(--accent); font: inherit; font-size: 0.9rem; font-weight: 600; cursor: pointer; }
-.sort-button + .sort-button { border-left: 1px solid var(--accent); }
-.sort-button.active { background: var(--accent); color: var(--accent-text); }
+.sort-toggle { display: flex; gap: 0; margin: 0 0 8px; border: 2px solid var(--accent); border-radius: 999px; overflow: hidden; }
+.sort-button { flex: 1; min-height: 40px; padding: 0 12px; border: 0; background: var(--bg); color: var(--accent); font: inherit; font-size: 0.9rem; font-weight: 700; cursor: pointer; }
+.sort-button + .sort-button { border-left: 2px solid var(--accent); }
+.sort-button.active { background: var(--insta); color: var(--accent-text); }
 .sort-button:disabled { opacity: 0.6; cursor: wait; }
-.staff-note { margin: 0 0 4px; padding: 6px 10px; border-radius: 6px; background: #fff4f4; color: var(--muted); font-size: 0.82rem; }
+.staff-note { margin: 0 0 4px; padding: 6px 10px; border-radius: 10px; background: #fff0f5; color: var(--muted); font-size: 0.82rem; }
 
 /* "Clear nearest result" button under the result box */
-.clear-result { margin-top: 8px; padding: 0; border: 0; background: none; color: var(--accent); font: inherit; font-size: 0.85rem; font-weight: 600; cursor: pointer; }
+.clear-result { margin-top: 8px; padding: 0; border: 0; background: none; color: var(--accent); font: inherit; font-size: 0.85rem; font-weight: 700; cursor: pointer; }
 
 /* Pop-up alert at the top of the screen (e.g. wrong staff passcode) */
-.toast { position: fixed; top: 56px; left: 50%; transform: translateX(-50%); z-index: 3000; display: flex; align-items: center; gap: 12px; width: min(92vw, 420px); padding: 12px 14px; background: var(--bg); border: 1px solid var(--border); border-left: 5px solid var(--red); border-radius: var(--radius); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25); }
+.toast { position: fixed; top: 60px; left: 50%; transform: translateX(-50%); z-index: 3000; display: flex; align-items: center; gap: 12px; width: min(92vw, 420px); padding: 12px 14px; background: var(--bg); border: 0; border-left: 6px solid var(--pink); border-radius: var(--radius); box-shadow: 0 8px 24px rgba(131, 58, 180, 0.3); }
 .toast[hidden] { display: none; }
 .toast-text { flex: 1; }
 .toast-text strong, .toast-text span { display: block; }
 .toast-text span { color: var(--muted); font-size: 0.85rem; }
-.toast-close { flex: none; min-height: 36px; padding: 0 14px; border: 0; border-radius: 999px; background: var(--accent); color: var(--accent-text); font: inherit; font-weight: 600; cursor: pointer; }
+.toast-close { flex: none; min-height: 36px; padding: 0 14px; border: 0; border-radius: 999px; background: var(--insta); color: var(--accent-text); font: inherit; font-weight: 700; cursor: pointer; }

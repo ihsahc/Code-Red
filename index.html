@@ -7,7 +7,12 @@
 
   <!-- Leaflet (the map library), loaded from the internet -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <!-- Pacifico (the 2016 script logo font) and Roboto (Material Design) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pacifico&family=Roboto:wght@400;500;700&display=swap" />
   <link rel="stylesheet" href="style.css" />
+  <meta name="theme-color" content="#c13584" />
 </head>
 <body>
   <header class="topbar">
@@ -24,10 +29,10 @@
   <!-- Bottom panel: legend, the main button, and the result -->
   <section class="panel">
     <ul class="legend" aria-label="Legend">
-      <li><span class="dot green">✓</span> Over 50%</li>
-      <li><span class="dot yellow">~</span> 15–50%</li>
-      <li><span class="dot red">!</span> Under 15%</li>
-      <li><span class="dot gray">?</span> Offline</li>
+      <li><span class="dot st-full" aria-hidden="true">😎</span> Over 50%</li>
+      <li><span class="dot st-low" aria-hidden="true">😬</span> 15–50%</li>
+      <li><span class="dot st-empty" aria-hidden="true">😱</span> Under 15%</li>
+      <li><span class="dot st-offline" aria-hidden="true">💤</span> Offline</li>
     </ul>
 
     <button id="find-btn" class="primary">Find nearest stocked (15%+)</button>
