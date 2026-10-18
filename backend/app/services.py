@@ -13,20 +13,32 @@ from app.status import Status, current_status, fill_percent, status_from_percent
 from app.timeutil import to_utc, utcnow
 
 
+def streak_days(d: Dispenser, status: Status, now) -> int | None:
+    """Days since the dispenser was last empty: 0 while empty, None if unknown."""
+    if status == Status.EMPTY:
+        return 0
+    if d.streak_started_at is None:
+        return None
+    return max(0, (now - d.streak_started_at).days)
+
+
 def dispenser_out(d: Dispenser, now=None) -> DispenserOut:
     now = now or utcnow()
     pct = d.last_fill_percent
+    status = current_status(pct, d.last_reading_at, now)
     return DispenserOut(
         id=d.id,
         building=BuildingOut(id=d.building.id, name=d.building.name, lat=d.building.lat, lng=d.building.lng),
         floor=d.floor,
         location_note=d.location_note,
         real=bool(d.is_real),
-        status=current_status(pct, d.last_reading_at, now),
+        status=status,
         fill_percent=pct,
         units_left=units_left(pct, d.empty_distance_mm, d.full_distance_mm) if pct is not None else None,
         last_reading_at=to_utc(d.last_reading_at),
         last_refill_at=to_utc(d.last_refill_at),
+        streak_days=streak_days(d, status, now),
+        streak_started_at=to_utc(d.streak_started_at),
     )
 
 
@@ -81,6 +93,12 @@ def record_reading(
         for a in open_alerts:
             a.resolved_at = at
         db.add(Alert(dispenser_id=d.id, level=Status.LOW, fill_percent=new_pct, created_at=at))
+
+    # Streaks: going empty breaks the streak; the next non-empty reading starts a new one.
+    if new_status == Status.EMPTY:
+        d.streak_started_at = None
+    elif d.streak_started_at is None:
+        d.streak_started_at = at
 
     d.last_distance_mm = distance_mm
     d.last_fill_percent = new_pct

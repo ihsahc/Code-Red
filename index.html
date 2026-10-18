@@ -48,6 +48,13 @@
         <button id="sort-closest" class="sort-button" type="button">Closest to me</button>
       </div>
       <div id="urgent-list" class="urgent-list" aria-live="polite"></div>
+
+      <div class="streak-section">
+        <div class="staff-heading"><strong>🔥 Streaks</strong></div>
+        <p class="staff-help">Days since each dispenser was last empty. ⌛ = running low, streak at risk!</p>
+        <ol id="streak-list" class="streak-list"></ol>
+        <button id="streak-more" class="text-button streak-more" type="button" hidden></button>
+      </div>
     </section>
 
     <!-- Shown only if the user says no to location access -->

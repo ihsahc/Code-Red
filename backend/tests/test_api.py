@@ -325,3 +325,53 @@ def select_building(name):
     from sqlalchemy import select
 
     return select(Building).where(Building.name == name)
+
+
+# --- Streaks -------------------------------------------------------------------
+
+
+def test_streak_breaks_when_empty_and_restarts_on_refill(client):
+    assert client.get("/dispensers/near").json()["streak_days"] is None  # never reported
+    send(client, "near", FULL_MM, "k1")
+    d = client.get("/dispensers/near").json()
+    assert d["streak_days"] == 0 and d["streak_started_at"] is not None  # streak begins
+
+    # Pretend the streak started 9 days ago.
+    with next(app.dependency_overrides[get_db]()) as db:
+        db.get(Dispenser, "near").streak_started_at = utcnow() - timedelta(days=9, hours=1)
+        db.commit()
+    send(client, "near", LOW_MM, "k1")  # running low keeps the streak
+    assert client.get("/dispensers/near").json()["streak_days"] == 9
+
+    send(client, "near", EMPTY_MM, "k1")  # empty breaks it
+    d = client.get("/dispensers/near").json()
+    assert d["streak_days"] == 0 and d["streak_started_at"] is None
+
+    send(client, "near", FULL_MM, "k1")  # refilled: a new streak starts from now
+    d = client.get("/dispensers/near").json()
+    assert d["streak_days"] == 0 and d["streak_started_at"] is not None
+
+
+def test_demo_streaks_are_stable_and_skip_real_and_empty(monkeypatch):
+    from app import seed as seed_mod
+
+    monkeypatch.setattr(config_module(), "REAL_DISPENSER_ID", "pico")
+    rows = [
+        ("stocked", "Klaus", "1", "", 33.7, -84.3, 100),
+        ("empty", "Klaus", "2", "", 33.7, -84.3, 400),
+        ("pico", "Klaus", "3", "", 33.7, -84.3, 100),
+    ]
+    monkeypatch.setattr(seed_mod, "DISPENSERS", rows)
+    _, Session = make_db()
+    with Session() as db:
+        seed_mod.sync_demo_data(db)
+        now = utcnow()
+        stocked = db.get(Dispenser, "stocked")
+        days = (now - stocked.streak_started_at).days
+        assert days == seed_mod.demo_streak_days("stocked") and 1 <= days <= 60
+        assert db.get(Dispenser, "empty").streak_started_at is None
+        assert db.get(Dispenser, "pico").streak_started_at is None  # real box: no fake history
+
+        first = stocked.streak_started_at
+        seed_mod.sync_demo_data(db)  # restart: existing streaks untouched
+        assert db.get(Dispenser, "stocked").streak_started_at == first

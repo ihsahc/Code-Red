@@ -31,9 +31,14 @@ function timeAgo(iso) { if (!iso) return "never"; const s = Math.max(0, Math.rou
 function distance(a, b, c, d) { const r = (n) => n * Math.PI / 180, h = Math.sin(r(c - a) / 2) ** 2 + Math.cos(r(a)) * Math.cos(r(c)) * Math.sin(r(d - b) / 2) ** 2; return 12742000 * Math.asin(Math.sqrt(h)); }
 function distanceText(m) { return `${m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(1)} km`} away (about ${Math.max(1, Math.round(m / CONFIG.WALK_METERS_PER_MIN))} min walk)`; }
 
+// Stable made-up streak (1-60 days) for demo data, matching how the backend fakes them.
+function demoStreak(id) { let h = 0; for (const c of id) h = (h * 31 + c.charCodeAt(0)) >>> 0; return (h % 60) + 1; }
 function fallbackData() {
   const now = Date.now();
-  return DISPENSERS.map((d) => ({ id: d.id, building: { name: d.building, lat: d.lat, lng: d.lng }, floor: d.floor, location_note: "Women's restroom", fill_percent: d.fill, last_reading_at: new Date(d.offline ? now - 600000 : now).toISOString(), status: d.offline ? "offline" : d.fill > CONFIG.GREEN_ABOVE ? "full" : d.fill >= CONFIG.STOCKED_MIN ? "low" : "empty", demo: !CONFIG.REAL_DISPENSER_IDS.includes(d.id) }));
+  return DISPENSERS.map((d) => {
+    const status = d.offline ? "offline" : d.fill > CONFIG.GREEN_ABOVE ? "full" : d.fill >= CONFIG.STOCKED_MIN ? "low" : "empty";
+    return { id: d.id, building: { name: d.building, lat: d.lat, lng: d.lng }, floor: d.floor, location_note: "Women's restroom", fill_percent: d.fill, last_reading_at: new Date(d.offline ? now - 600000 : now).toISOString(), status, streak_days: status === "empty" ? 0 : demoStreak(d.id), demo: !CONFIG.REAL_DISPENSER_IDS.includes(d.id) };
+  });
 }
 function normalize(d) { return { ...d, demo: !CONFIG.REAL_DISPENSER_IDS.includes(d.id) }; }
 // Group dispensers by building. Each building becomes ONE pin whose color comes
@@ -107,7 +112,31 @@ async function urgent() {
   const byLongest = (a, b) => new Date(a.since) - new Date(b.since); // empty the longest first
   items.sort(staffSort === "closest" && staffLocation ? (a, b) => a.meters - b.meters || byLongest(a, b) : byLongest);
   const note = staffNote ? `<p class="staff-note">${escapeHtml(staffNote)}</p>` : "";
-  $("urgent-list").innerHTML = note + (items.length ? items.map((d) => `<div class="urgent-item empty"><strong>${escapeHtml(d.building)}</strong><span>${escapeHtml(d.floor)} · ${Math.round(d.fill)}% full · empty since ${timeAgo(d.since)}${d.meters != null ? ` · ${distanceText(d.meters)}` : ""}</span></div>`).join("") : "<p>No empty dispensers right now.</p>");
+  $("urgent-list").innerHTML = note + (items.length ? items.map((d) => `<div class="urgent-item empty"><strong>${escapeHtml(d.building)}</strong><span>${escapeHtml(d.floor)} · ${Math.round(d.fill)}% full · empty since ${timeAgo(d.since)}${d.meters != null ? ` · ${distanceText(d.meters)}` : ""}</span><span class="streak-lost">💔 Streak lost</span></div>`).join("") : "<p>No empty dispensers right now.</p>");
+  renderStreaks();
+}
+
+// Snapchat-style streaks: days since each dispenser was last empty, longest first.
+// Empty dispensers have lost their streak (shown above); offline ones are left out
+// because a silent sensor can't prove it stayed stocked.
+const STREAKS_SHOWN = 10;
+let showAllStreaks = false;
+function streakBadge(d) {
+  const days = d.streak_days;
+  const extra = (days >= 100 ? " 💯" : "") + (d.status === "low" ? " ⌛" : "");
+  return `<span class="streak-count${d.status === "low" ? " at-risk" : ""}">🔥 ${days}${extra}</span>`;
+}
+function renderStreaks() {
+  const list = dispensers
+    .filter((d) => (d.status === "full" || d.status === "low") && d.streak_days != null)
+    .sort((a, b) => b.streak_days - a.streak_days || a.building.name.localeCompare(b.building.name));
+  const shown = showAllStreaks ? list : list.slice(0, STREAKS_SHOWN);
+  $("streak-list").innerHTML = shown.length
+    ? shown.map((d, i) => `<li class="streak-item"><span class="streak-rank">${i + 1}</span><span class="streak-name"><strong>${escapeHtml(d.building.name)}</strong><span>${escapeHtml(d.floor)} · ${Math.round(d.fill_percent)}% full · ${d.streak_days === 1 ? "1 day" : `${d.streak_days} days`}</span></span>${streakBadge(d)}</li>`).join("")
+    : "<p>No streaks yet: they start once a dispenser reports in stocked.</p>";
+  const more = $("streak-more");
+  more.hidden = list.length <= STREAKS_SHOWN;
+  more.textContent = showAllStreaks ? "Show top 10" : `Show all ${list.length}`;
 }
 function syncSortButtons() {
   [["sort-longest", "longest"], ["sort-closest", "closest"]].forEach(([id, mode]) => { $(id).classList.toggle("active", staffSort === mode); $(id).setAttribute("aria-pressed", String(staffSort === mode)); });
@@ -137,5 +166,6 @@ $("sort-closest").addEventListener("click", () => {
   );
 });
 $("clear-result").addEventListener("click", clearNearest);
+$("streak-more").addEventListener("click", () => { showAllStreaks = !showAllStreaks; renderStreaks(); });
 syncSortButtons();
 load(); setInterval(load, CONFIG.POLL_INTERVAL_MS);

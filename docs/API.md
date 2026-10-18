@@ -49,9 +49,17 @@ Most endpoints return this shape:
   "fill_percent": 27.8,
   "units_left": 2,
   "last_reading_at": "2026-10-17T16:38:12Z",
-  "last_refill_at": null
+  "last_refill_at": null,
+  "streak_days": 12,
+  "streak_started_at": "2026-10-05T14:02:00Z"
 }
 ```
+
+`streak_days` is the Snapchat-style streak: whole days since the dispenser was
+last empty. It is `0` while the dispenser is empty (the streak is broken) and
+starts again from 0 at the next non-empty reading. It is `null` if the dispenser
+has never reported. Simulated dispensers start with a made-up streak of 1-60
+days so the demo has history; the real dispenser's streak is always genuine.
 
 `real` is `true` only for the physical dispenser (the Pico W); every other
 dispenser is simulated. The frontend can use it for the "Live dispenser" badge

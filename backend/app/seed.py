@@ -14,6 +14,7 @@ can report for every dispenser. Give real devices random keys instead.
 """
 
 import argparse
+import hashlib
 from datetime import timedelta
 
 from sqlalchemy import delete, select
@@ -119,6 +120,30 @@ def _add_starting_readings(db: Session, d: Dispenser, distance: float | None) ->
         record_reading(db, d, distance, 3.8, at=now - timedelta(seconds=30))
 
 
+def demo_streak_days(dispenser_id: str) -> int:
+    """A made-up but stable streak length (1-60 days) for a simulated dispenser.
+
+    Real streaks only grow one day per day, so a fresh demo would show 0 everywhere.
+    Hashing the ID gives each simulated dispenser its own believable history that
+    stays the same across restarts.
+    """
+    return int(hashlib.sha256(dispenser_id.encode()).hexdigest(), 16) % 60 + 1
+
+
+def _give_demo_streak(d: Dispenser, new: bool) -> None:
+    """Back-date a simulated dispenser's streak so the staff view has history to show.
+
+    Only for simulated dispensers that aren't empty and don't have a streak from an
+    earlier run (new ones always get one). The real box's streak is always genuine.
+    """
+    if d.is_real or d.id == config.REAL_DISPENSER_ID:
+        return
+    if d.last_fill_percent is None or d.last_fill_percent < config.EMPTY_BELOW_PERCENT:
+        return
+    if new or d.streak_started_at is None:
+        d.streak_started_at = utcnow() - timedelta(days=demo_streak_days(d.id), hours=3)
+
+
 def sync_demo_data(db: Session) -> dict[str, int]:
     """Make the database's buildings and dispensers match DISPENSERS above.
 
@@ -154,6 +179,7 @@ def sync_demo_data(db: Session) -> dict[str, int]:
         d = existing.get(dispenser_id)
         if d is not None:
             d.building_id, d.floor, d.location_note = buildings[building].id, floor, note
+            _give_demo_streak(d, new=False)
             continue
         d = Dispenser(
             id=dispenser_id,
@@ -165,6 +191,7 @@ def sync_demo_data(db: Session) -> dict[str, int]:
         db.add(d)
         db.flush()
         _add_starting_readings(db, d, distance)
+        _give_demo_streak(d, new=True)
         added += 1
     db.flush()
 

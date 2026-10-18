@@ -28,6 +28,10 @@ class DispenserOut(BaseModel):
     units_left: int | None = Field(description="Rough count of products left")
     last_reading_at: datetime | None
     last_refill_at: datetime | None
+    streak_days: int | None = Field(
+        description="Whole days since this dispenser was last empty (0 if empty now, null if unknown)"
+    )
+    streak_started_at: datetime | None = Field(description="When the current streak began")
 
 
 class NearbyDispenserOut(DispenserOut):

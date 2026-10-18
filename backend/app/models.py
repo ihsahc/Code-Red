@@ -46,6 +46,9 @@ class Dispenser(Base):
     last_fill_percent: Mapped[float | None] = mapped_column(Float, nullable=True)
     last_reading_at: Mapped[datetime | None] = mapped_column(nullable=True)
     last_refill_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    # When the current "not empty" streak began. Cleared while the dispenser is
+    # empty and set again by its next non-empty reading (Snapchat-style streaks).
+    streak_started_at: Mapped[datetime | None] = mapped_column(nullable=True)
 
     building: Mapped[Building] = relationship(back_populates="dispensers")
     readings: Mapped[list["Reading"]] = relationship(back_populates="dispenser")
