@@ -51,7 +51,7 @@ Each line is the latest reading in inches and what the Pico thinks is in the box
 | Message | Meaning | Sent to the website? |
 |---|---|---|
 | `13 left (100% full)` … `7 left (54% full)` | Exact count | Yes |
-| `LOW: 6 or fewer left, refill soon` | The column is empty; the sensor can only see the tray | Yes (shows as "low", 6 left) |
+| `LOW: 6 or fewer left, refill soon` | The column is empty; the sensor can only see the tray | Yes, as 23.1% (below 25%, "low", 3 left) |
 | `LID OPEN: put the lid back on` | Nothing in range (the sensor reports 8190 mm) | No |
 | `ERROR: … doesn't match any tampon level` | The reading settled between levels: lid or sensor shifted, or a tampon is tilted | No |
 

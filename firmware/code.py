@@ -236,10 +236,15 @@ def connect():
     return session
 
 
+# Once the column is empty the sensor can't tell 6 left from 0, so "running low"
+# is reported as this many tampons: 3 of 13 = 23.1%, below 25%.
+LOW_REPORTED_AS = 3
+
+
 def fill_percent(count):
-    """Fill % for a tampon count. "LOW" counts as the most that could be left."""
+    """Fill % for a tampon count. "LOW" (6 or fewer left) is reported below 25%."""
     if count == "LOW":
-        count = TOTAL - len(BANDS)  # column empty: 6 or fewer left in the tray
+        count = LOW_REPORTED_AS
     return round(count / TOTAL * 100, 1)
 
 
