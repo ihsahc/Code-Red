@@ -9,8 +9,39 @@ from sqlalchemy.orm import Session
 from app import config
 from app.models import Alert, Dispenser, Reading
 from app.schemas import AlertOut, BuildingOut, DispenserOut
-from app.status import Status, current_status, fill_percent, status_from_percent, units_left
+from app.status import (
+    Status,
+    current_status,
+    fill_percent,
+    percent_from_units,
+    status_from_percent,
+    units_from_levels,
+    units_left,
+)
 from app.timeutil import to_utc, utcnow
+
+
+def counts_by_level(d: Dispenser) -> bool:
+    """The real box is counted with its measured levels (REAL_LEVELS_MM in config)."""
+    return bool(d.is_real) and bool(config.REAL_LEVELS_MM)
+
+
+def reading_fill_percent(d: Dispenser, distance_mm: float) -> float:
+    """Fill percentage for one reading from this dispenser."""
+    if counts_by_level(d):
+        units = units_from_levels(distance_mm, config.REAL_LEVELS_MM, config.REAL_COLUMN_EMPTY_MM, config.REAL_CAPACITY)
+        return percent_from_units(units, config.REAL_CAPACITY)
+    return fill_percent(distance_mm, d.empty_distance_mm, d.full_distance_mm)
+
+
+def display_units_left(d: Dispenser, pct: float | None) -> int | None:
+    """Products left for the API. For the real box this is an exact count
+    (or "this many or fewer" once its column is empty)."""
+    if pct is None:
+        return None
+    if counts_by_level(d):
+        return round(pct / 100 * config.REAL_CAPACITY)
+    return units_left(pct, d.empty_distance_mm, d.full_distance_mm)
 
 
 def streak_days(d: Dispenser, status: Status, now) -> int | None:
@@ -34,7 +65,7 @@ def dispenser_out(d: Dispenser, now=None) -> DispenserOut:
         real=bool(d.is_real),
         status=status,
         fill_percent=pct,
-        units_left=units_left(pct, d.empty_distance_mm, d.full_distance_mm) if pct is not None else None,
+        units_left=display_units_left(d, pct),
         last_reading_at=to_utc(d.last_reading_at),
         last_refill_at=to_utc(d.last_refill_at),
         streak_days=streak_days(d, status, now),
@@ -62,7 +93,7 @@ def record_reading(
 ) -> tuple[float, Status]:
     """Save a reading, update the dispenser, and raise or resolve alerts."""
     at = at or utcnow()
-    new_pct = fill_percent(distance_mm, d.empty_distance_mm, d.full_distance_mm)
+    new_pct = reading_fill_percent(d, distance_mm)
     new_status = status_from_percent(new_pct)
     old_pct = d.last_fill_percent
 
@@ -125,7 +156,14 @@ def sync_real_dispenser(db: Session) -> str:
     else:
         key_note = f"WARNING: REAL_DEVICE_KEY not set, still using '{d.device_key}'"
     db.commit()
-    return f"Real dispenser '{d.id}': empty={d.empty_distance_mm:g} mm, full={d.full_distance_mm:g} mm, {key_note}."
+    if config.REAL_LEVELS_MM:
+        calibration = (
+            f"counted by level ({config.REAL_CAPACITY} tampons, "
+            f"{len(config.REAL_LEVELS_MM)} measured levels, column empty at {config.REAL_COLUMN_EMPTY_MM:g} mm)"
+        )
+    else:
+        calibration = f"empty={d.empty_distance_mm:g} mm, full={d.full_distance_mm:g} mm"
+    return f"Real dispenser '{d.id}': {calibration}, {key_note}."
 
 
 def distance_m(lat1: float, lng1: float, lat2: float, lng2: float) -> float:

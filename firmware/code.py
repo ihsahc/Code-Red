@@ -1,21 +1,17 @@
 """Code Red dispenser: Raspberry Pi Pico W + VL53L0X, CircuitPython.
 
-Every few seconds this measures the distance from the sensor (mounted at the
-top of the box, pointing down) to the top of the tampon stack, and sends it
-to the backend. The backend turns the distance into a fill percentage, so
-calibration changes never need this file to be re-flashed.
+Counts the tampons in the column and prints what it sees. Whenever the count
+changes, and every few seconds anyway, it sends the settled sensor distance to
+the backend (POST /readings). The backend turns that distance into the count,
+fill % and status the website shows, using the same calibration
+(REAL_LEVELS_MM in backend/app/config.py).
 
-Settings (Wi-Fi, API URL, device key) live in settings.toml, not here.
-Set CALIBRATE = 1 in settings.toml to just print distances for measuring.
+Settings (Wi-Fi, API URL, device key) live in settings.toml on the CIRCUITPY
+drive, not here. Set CALIBRATE = 1 there to print readings without sending.
 
 Wiring (VL53L0X -> Pico W):
-    VIN -> 3V3 OUT (pin 36)      GND -> GND (pin 38)
-    SDA -> GP4     (pin 6)       SCL -> GP5 (pin 7)
-
-The LED on the Pico W blinks:
-    once      reading sent successfully
-    twice     the sensor didn't see anything (lid open? sensor blocked?)
-    3 times   couldn't send (Wi-Fi, server, or wrong key: check the serial output)
+    VIN -> 3V3 OUT (pin 36)      GND -> any GND pin
+    SDA -> GP14    (pin 19)      SCL -> GP15 (pin 20)
 """
 
 import os
@@ -26,181 +22,168 @@ import adafruit_requests
 import adafruit_vl53l0x
 import board
 import busio
-import digitalio
-import microcontroller
 import wifi
 
-# --- Settings (from settings.toml) ---------------------------------------
+# --- Settings (from settings.toml) -----------------------------------------
 API_URL = (os.getenv("API_URL") or "https://code-red-api.onrender.com").rstrip("/")
 DISPENSER_ID = os.getenv("DISPENSER_ID") or "klaus-atrium-pico-w"
 DEVICE_KEY = os.getenv("DEVICE_KEY") or ""
+# Keep this well under 2 minutes, or the map shows the box as "offline".
 REPORT_EVERY_SECONDS = int(os.getenv("REPORT_EVERY_SECONDS") or 5)
+# 1 = only print readings (for measuring), 0 = also send them to the website.
 CALIBRATE = int(os.getenv("CALIBRATE") or 0)
-
-SAMPLES = 10  # readings per report; we send the median
-MAX_VALID_MM = 1200  # the sensor reports ~8190 when it sees nothing at all
 REQUEST_TIMEOUT = 30  # seconds; the free Render server can take a while to wake up
-RESET_AFTER_FAILURES = 12  # restart the board if this many reports in a row fail
+
+# --- Sensor -----------------------------------------------------------------
+i2c = busio.I2C(scl=board.GP15, sda=board.GP14)
+tof = adafruit_vl53l0x.VL53L0X(i2c)
+tof.measurement_timing_budget = 100000
+
+TOTAL = 13
+# Calibrated from the Oct 18 run (new setup).
+# (tampons left, lowest OK reading, highest OK reading) in inches
+# A reading that settles in a gap between bands = something is misaligned
+BANDS = [
+    (13, 0.40, 0.85),
+    (12, 1.09, 1.49),
+    (11, 1.88, 2.28),
+    (10, 2.55, 2.95),
+    (9, 3.30, 3.70),
+    (8, 3.93, 4.33),
+    (7, 4.54, 4.90),
+]
+TOO_CLOSE = 0.40  # closer than this: something is touching/blocking the sensor
+LOW_ZONE = 4.90  # 4.90 to 6.00: column is empty, 6 or fewer left in the tray
+LID_OPEN = 6.00  # farther than this: lid is off or the sensor isn't aimed into the column
+# (322.44 in = 8190 mm is the sensor's "nothing in range" code)
+STABLE_N = 3  # readings in a row that must agree (~1 second)
+STABLE_SPREAD = 0.10  # how much they can differ and still count as "settled"
 
 
-# --- Helpers ----------------------------------------------------------------
+def read_inches():
+    r = sorted(tof.range for _ in range(3))  # median of 3 quick readings
+    return r[1] / 25.4
 
 
-def blink(led, times=1, on=0.08, off=0.12):
-    for _ in range(times):
-        led.value = True
-        time.sleep(on)
-        led.value = False
-        time.sleep(off)
+def match(d):
+    if d < TOO_CLOSE:
+        return "ERR"
+    if d >= LOW_ZONE:
+        return "LOW"
+    for count, lo, hi in BANDS:
+        if lo <= d <= hi:
+            return count
+    return "ERR"  # settled between bands = misaligned
 
 
-def median(values):
-    s = sorted(values)
-    mid = len(s) // 2
-    return s[mid] if len(s) % 2 else (s[mid - 1] + s[mid]) / 2
+# --- Wi-Fi and the website --------------------------------------------------
+session = None
 
 
-def read_distance(sensor, samples=SAMPLES):
-    """Median of several readings in mm, or None if the sensor sees nothing useful."""
-    valid = []
-    for _ in range(samples):
-        mm = sensor.range
-        if 0 < mm < MAX_VALID_MM:
-            valid.append(mm)
-    # Need at least half the readings to agree that something is there.
-    if len(valid) < samples // 2:
-        return None
-    return median(valid)
+def connect():
+    """Join Wi-Fi if needed and return an HTTP session."""
+    global session
+    if not wifi.radio.connected:
+        ssid = os.getenv("CIRCUITPY_WIFI_SSID")
+        print("Connecting to Wi-Fi:", ssid)
+        wifi.radio.connect(ssid, os.getenv("CIRCUITPY_WIFI_PASSWORD"))
+        session = None
+    if session is None:
+        print("Wi-Fi connected. IP:", wifi.radio.ipv4_address)
+        pool = adafruit_connection_manager.get_radio_socketpool(wifi.radio)
+        ssl_context = adafruit_connection_manager.get_radio_ssl_context(wifi.radio)
+        session = adafruit_requests.Session(pool, ssl_context)
+    return session
 
 
-def setup_led():
-    led = digitalio.DigitalInOut(board.LED)
-    led.direction = digitalio.Direction.OUTPUT
-    return led
-
-
-def setup_sensor(led):
-    """Start the VL53L0X, retrying (and blinking) until it answers."""
-    while True:
-        try:
-            i2c = busio.I2C(board.GP5, board.GP4)  # SCL, SDA
-            sensor = adafruit_vl53l0x.VL53L0X(i2c)
-            # A longer timing budget gives steadier readings (0.2 s each).
-            sensor.measurement_timing_budget = 200000
-            print("Sensor ready.")
-            return sensor
-        except (ValueError, RuntimeError, OSError) as e:
-            print("Can't find the VL53L0X:", e)
-            print("Check wiring: SDA->GP4, SCL->GP5, VIN->3V3, GND->GND. Retrying in 5 s.")
-            blink(led, 3, 0.05, 0.1)
-            time.sleep(5)
-
-
-def connect_wifi():
-    if wifi.radio.connected:
-        return
-    ssid = os.getenv("CIRCUITPY_WIFI_SSID")
-    print("Connecting to Wi-Fi:", ssid)
-    wifi.radio.connect(ssid, os.getenv("CIRCUITPY_WIFI_PASSWORD"))
-    print("Connected, IP:", wifi.radio.ipv4_address)
-
-
-def make_session():
-    pool = adafruit_connection_manager.get_radio_socketpool(wifi.radio)
-    ssl_context = adafruit_connection_manager.get_radio_ssl_context(wifi.radio)
-    return adafruit_requests.Session(pool, ssl_context)
-
-
-def send_reading(session, distance_mm):
-    """POST one reading. Returns True if the backend accepted it."""
-    response = session.post(
-        API_URL + "/readings",
-        json={"dispenser_id": DISPENSER_ID, "distance_mm": distance_mm},
-        headers={"X-Device-Key": DEVICE_KEY},
-        timeout=REQUEST_TIMEOUT,
-    )
+def send(distance_mm):
+    """POST one reading. Returns what the website now shows, or None if it failed."""
+    global session
     try:
-        if response.status_code == 201:
-            body = response.json()
-            print("Sent {} mm -> {}% ({})".format(distance_mm, body["fill_percent"], body["status"]))
-            return True
-        if response.status_code == 401:
-            print("Rejected (401): DISPENSER_ID or DEVICE_KEY doesn't match the backend.")
-        else:
-            print("Backend error", response.status_code, response.text[:200])
-        return False
-    finally:
-        response.close()
-
-
-# --- Modes --------------------------------------------------------------------
-
-
-def calibrate(sensor, led):
-    """Print distances twice a second, without sending anything.
-
-    Use it to measure: empty the box and note the reading (REAL_EMPTY_DISTANCE_MM),
-    then fill it and note the reading (REAL_FULL_DISTANCE_MM).
-    """
-    print("CALIBRATE mode: printing distances only. Set CALIBRATE = 0 to start reporting.")
-    while True:
-        mm = read_distance(sensor)
-        print("distance:", "nothing detected" if mm is None else f"{mm} mm")
-        led.value = not led.value
-        time.sleep(0.5)
-
-
-def report_forever(sensor, led):
-    if not DEVICE_KEY:
-        print("WARNING: DEVICE_KEY is empty in settings.toml; the backend will reject readings.")
-    session = None
-    failures = 0
-    while True:
-        started = time.monotonic()
-        ok = False
-        skipped = False
+        response = connect().post(
+            API_URL + "/readings",
+            json={"dispenser_id": DISPENSER_ID, "distance_mm": distance_mm},
+            headers={"X-Device-Key": DEVICE_KEY},
+            timeout=REQUEST_TIMEOUT,
+        )
         try:
-            mm = read_distance(sensor)
-            if mm is None:
-                # Nothing to measure (lid open, sensor blocked?). Don't send a bogus
-                # value; the map will show "offline" if this goes on for a while.
-                print("No valid reading this round; skipping.")
-                skipped = True
+            if response.status_code == 201:
+                body = response.json()
+                return "{}% {}".format(body["fill_percent"], body["status"])
+            if response.status_code == 401:
+                print("  Website said 401: DEVICE_KEY doesn't match REAL_DEVICE_KEY on Render.")
             else:
-                connect_wifi()
-                if session is None:
-                    session = make_session()
-                ok = send_reading(session, mm)
-        except Exception as e:  # keep running no matter what goes wrong
-            print("Error:", repr(e))
-            session = None  # rebuild the connection next time
-
-        if ok:
-            failures = 0
-            blink(led, 1)
-        elif skipped:
-            blink(led, 2, 0.05, 0.1)  # sensor problem, not a network one: no restart
-        else:
-            failures += 1
-            blink(led, 3, 0.05, 0.1)
-            if failures >= RESET_AFTER_FAILURES:
-                print("Too many failures in a row; restarting the board.")
-                time.sleep(1)
-                microcontroller.reset()
-
-        # Keep a steady rhythm no matter how long the request took.
-        elapsed = time.monotonic() - started
-        time.sleep(max(0, REPORT_EVERY_SECONDS - elapsed))
+                print("  Website error", response.status_code, response.text[:120])
+        finally:
+            response.close()
+    except Exception as e:  # Wi-Fi dropped, server asleep, ...: keep counting anyway
+        print("  Couldn't send:", repr(e))
+        session = None  # start a fresh connection next time
+    return None
 
 
-def main():
-    led = setup_led()
-    sensor = setup_sensor(led)
-    if CALIBRATE:
-        calibrate(sensor, led)
+# --- Start up ---------------------------------------------------------------
+print("MAC address:", ":".join(f"{b:02X}" for b in wifi.radio.mac_address))
+if CALIBRATE:
+    print("CALIBRATE = 1: printing readings only, not sending them.")
+else:
+    print("Reporting as", DISPENSER_ID, "to", API_URL)
+    if not DEVICE_KEY:
+        print("WARNING: DEVICE_KEY is empty in settings.toml; the website will reject readings.")
+    try:
+        connect()
+    except Exception as e:
+        print("Wi-Fi connection failed:", e, "(will keep trying)")
+
+# --- Main loop ----------------------------------------------------------------
+recent = []
+status = "Starting up..."
+good_mm = None  # latest settled reading that matched a tampon level, in mm
+last_try = None  # when we last tried to send
+last_try_status = None  # what the status was then
+
+while True:
+    d = read_inches()
+
+    if d > LID_OPEN:
+        # Can't be a reading from inside the box, so no need to wait for it to settle
+        recent = []
+        good_mm = None
+        status = "LID OPEN: put the lid back on"
     else:
-        print("Reporting as", DISPENSER_ID, "to", API_URL, "every", REPORT_EVERY_SECONDS, "s")
-        report_forever(sensor, led)
+        recent.append(d)
+        if len(recent) > STABLE_N:
+            recent.pop(0)
 
+        settled = len(recent) == STABLE_N and max(recent) - min(recent) <= STABLE_SPREAD
+        if settled:
+            avg = sum(recent) / STABLE_N
+            result = match(avg)
 
-main()
+            if result == "ERR":
+                # Works at any fill level, including right after power-on
+                good_mm = None
+                status = (
+                    f"ERROR: {avg:.2f} in doesn't match any tampon level. "
+                    "Lid or sensor shifted, or a tampon is tilted. Fix and it will clear."
+                )
+            else:
+                good_mm = round(avg * 25.4, 1)
+                if result == "LOW":
+                    status = "LOW: 6 or fewer left, refill soon"
+                else:
+                    status = f"{result} left ({round(result / TOTAL * 100)}% full)"
+
+    print(f"{d:.2f} in -> {status}")
+
+    # Send when the count changes, and every few seconds so the map doesn't
+    # mark the box offline. Errors and an open lid are never sent.
+    now = time.monotonic()
+    due = last_try is None or status != last_try_status or now - last_try >= REPORT_EVERY_SECONDS
+    if good_mm is not None and due and not CALIBRATE:
+        last_try, last_try_status = now, status
+        shown = send(good_mm)
+        if shown:
+            print(f"  sent {good_mm} mm -> website shows {shown}")
+
+    time.sleep(0.05)

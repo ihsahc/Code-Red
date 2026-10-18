@@ -65,6 +65,11 @@ days so the demo has history; the real dispenser's streak is always genuine.
 dispenser is simulated. The frontend can use it for the "Live dispenser" badge
 instead of hard-coding the ID.
 
+For the real dispenser, `units_left` is an exact count from 13 down to 7. Below
+that its sensor can only see the tray, so it reports `units_left: 6` with status
+`low`, meaning **"6 or fewer"** (show it that way if you can). It never reports
+`empty`, because the sensor can't tell when the tray runs out.
+
 Several dispensers can share a building (and so the same coordinates). On the
 map, group them into one pin per building and list the dispensers by floor
 when the pin is tapped.

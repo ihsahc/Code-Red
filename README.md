@@ -77,9 +77,13 @@ pytest
 
 ## Calibrating the sensor
 
-The sensor values in `backend/app/config.py` are **placeholders**. Once the
-dispenser is built, measure three things and update them (or set them as
-environment variables on Render):
+The **real dispenser** (the Pico W) is already calibrated: it is counted level
+by level from readings measured on the box (`REAL_LEVELS_MM` in
+`backend/app/config.py`; how to redo it is in `firmware/README.md`).
+
+The values below are for the **simulated** dispensers and are placeholders.
+Update them in `backend/app/config.py` (or set them as environment variables
+on Render):
 
 | Setting | How to measure | Placeholder |
 |---|---|---|

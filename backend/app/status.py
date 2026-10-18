@@ -41,6 +41,26 @@ def units_left(percent: float, empty_mm: float | None = None, full_mm: float | N
     return round(percent / 100 * (empty - full) / config.PRODUCT_THICKNESS_MM)
 
 
+def units_from_levels(distance_mm: float, levels_mm: list[float], column_empty_mm: float, capacity: int) -> int:
+    """Products left in a box that was calibrated one level at a time.
+
+    levels_mm[0] is the reading with a full box (capacity left), levels_mm[1]
+    the reading with one fewer, and so on. A reading counts as the nearest
+    level. At or beyond column_empty_mm the column is empty and the sensor can
+    only see the tray, so this returns the most that could still be there:
+    capacity - len(levels_mm).
+    """
+    if distance_mm >= column_empty_mm:
+        return capacity - len(levels_mm)
+    nearest = min(range(len(levels_mm)), key=lambda i: abs(levels_mm[i] - distance_mm))
+    return capacity - nearest
+
+
+def percent_from_units(units: int, capacity: int) -> float:
+    """Fill percentage for a counted number of products."""
+    return round(max(0.0, min(100.0, units / capacity * 100)), 1)
+
+
 def status_from_percent(percent: float) -> Status:
     if percent > config.FULL_ABOVE_PERCENT:
         return Status.FULL
