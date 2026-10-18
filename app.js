@@ -4,9 +4,15 @@ let dispensers = [], buildings = new Map(), usingFallback = false, staffMode = f
 const markers = {};
 // Each status gets a color (class in style.css) and an emoji, so color isn't the only cue.
 const INFO = {
-  full: { color: "st-full", symbol: "😎", label: "Well stocked" }, low: { color: "st-low", symbol: "😬", label: "Running lower" },
-  empty: { color: "st-empty", symbol: "😱", label: "Low or empty" }, offline: { color: "st-offline", symbol: "💤", label: "Offline" },
+  full: { color: "st-full", symbol: "😎", label: "Well stocked" }, low: { color: "st-low", symbol: "😬", label: "Getting low" },
+  empty: { color: "st-empty", symbol: "😱", label: "Running lower" }, offline: { color: "st-offline", symbol: "💤", label: "Offline" },
 };
+// Which emoji and color to show, from the fill %: 60%+ full, 31-59% low, 30% or less empty.
+function look(d) {
+  if (!d || d.status === "offline") return "offline";
+  const n = Math.round(d.fill_percent ?? 0);
+  return n >= CONFIG.SUNGLASSES_FROM ? "full" : n > CONFIG.EXACT_PERCENT_ABOVE ? "low" : "empty";
+}
 const ROUTE_COLOR = "#833ab4"; // Instagram purple, for the "nearest" route and the you-are-here dot
 const map = L.map("map", {
   minZoom: CONFIG.MAP_MIN_ZOOM,
@@ -60,8 +66,8 @@ function groupBuildings() {
   });
   return map;
 }
-function icon(b) { const i = INFO[b.status], h = b.name === highlightedName ? " highlight" : ""; return L.divIcon({ className: "", html: `<div class="pin ${i.color}${h}">${i.symbol}</div>`, iconSize: [34, 34], iconAnchor: [17, 17], popupAnchor: [0, -18] }); }
-function floorRow(f) { const i = INFO[f.status], n = Math.round(f.fill_percent ?? 0), pct = f.status === "offline" ? "No recent reading" : n > CONFIG.EXACT_PERCENT_ABOVE ? `${n}% · ${i.label}` : "Running lower"; return `<li class="floor-row"><span class="dot ${i.color}">${i.symbol}</span><span class="floor-name">${escapeHtml(f.floor)}</span><span class="floor-pct">${pct}</span></li>`; }
+function icon(b) { const i = INFO[look(b.best)], h = b.name === highlightedName ? " highlight" : ""; return L.divIcon({ className: "", html: `<div class="pin ${i.color}${h}">${i.symbol}</div>`, iconSize: [34, 34], iconAnchor: [17, 17], popupAnchor: [0, -18] }); }
+function floorRow(f) { const i = INFO[look(f)], n = Math.round(f.fill_percent ?? 0), pct = f.status === "offline" ? "No recent reading" : n > CONFIG.EXACT_PERCENT_ABOVE ? `${n}% · ${i.label}` : "Running lower"; return `<li class="floor-row"><span class="dot ${i.color}">${i.symbol}</span><span class="floor-name">${escapeHtml(f.floor)}</span><span class="floor-pct">${pct}</span></li>`; }
 function popup(b) {
   const latest = b.floors.map((f) => f.last_reading_at).filter(Boolean).sort().pop();
   const live = b.floors.some((f) => !f.demo);

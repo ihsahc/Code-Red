@@ -21,6 +21,9 @@ const CONFIG = {
   // The sensor isn't reliable at or below this fill %, so the site shows
   // "Running lower" there instead of a number.
   EXACT_PERCENT_ABOVE: 30,
+  // Pin color and emoji: 60%+ 😎 green, 31-59% 😬 yellow, 30% or less 😱 red.
+  // (Staff alerts and "Find nearest stocked" still use the cutoffs above.)
+  SUNGLASSES_FROM: 60,
 
   // Where the map starts (Georgia Tech campus) and how zoomed in it is.
   MAP_CENTER: [33.7756, -84.3985],
