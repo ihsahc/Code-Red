@@ -77,9 +77,10 @@ pytest
 
 ## Calibrating the sensor
 
-The **real dispenser** (the Pico W) is already calibrated: it is counted level
-by level from readings measured on the box (`REAL_LEVELS_MM` in
-`backend/app/config.py`; how to redo it is in `firmware/README.md`).
+The **real dispenser** (the Pico W) is already calibrated: the Pico counts it
+level by level from readings measured on the box and sends its own fill % to
+the backend (`BANDS` in `firmware/code.py`; how to redo it is in
+`firmware/README.md`).
 
 The values below are for the **simulated** dispensers and are placeholders.
 Update them in `backend/app/config.py` (or set them as environment variables

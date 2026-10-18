@@ -89,11 +89,23 @@ def alert_out(a: Alert) -> AlertOut:
 
 
 def record_reading(
-    db: Session, d: Dispenser, distance_mm: float, battery_v: float | None, at=None
+    db: Session,
+    d: Dispenser,
+    distance_mm: float,
+    battery_v: float | None,
+    at=None,
+    device_fill_percent: float | None = None,
 ) -> tuple[float, Status]:
-    """Save a reading, update the dispenser, and raise or resolve alerts."""
+    """Save a reading, update the dispenser, and raise or resolve alerts.
+
+    If the device sent its own fill % (the real Pico W does), it is used as is;
+    otherwise it is worked out from the distance (the simulated dispensers).
+    """
     at = at or utcnow()
-    new_pct = reading_fill_percent(d, distance_mm)
+    if device_fill_percent is not None:
+        new_pct = round(device_fill_percent, 1)
+    else:
+        new_pct = reading_fill_percent(d, distance_mm)
     new_status = status_from_percent(new_pct)
     old_pct = d.last_fill_percent
 

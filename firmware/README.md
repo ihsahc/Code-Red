@@ -61,8 +61,9 @@ after 2 minutes.
 
 ## Calibrating
 
-The Pico and the backend both count tampons from levels measured on the real
-box (Oct 18 run, 13 tampons):
+The Pico counts tampons from levels measured on the real box (Oct 18 run,
+13 tampons) and sends the fill % it works out (count ÷ 13) with each reading.
+The backend saves that fill % as is; it doesn't recalculate it.
 
 | Tampons left | 13 | 12 | 11 | 10 | 9 | 8 | 7 | 6 or fewer |
 |---|---|---|---|---|---|---|---|---|
@@ -71,10 +72,11 @@ box (Oct 18 run, 13 tampons):
 
 If the box, lid, or sensor position changes, measure again: set `CALIBRATE = 1`
 in `settings.toml` (the Pico prints readings without sending them), note the
-steady reading at each count, then update **both** places:
+steady reading at each count, then update `BANDS` in `code.py` (inches, each
+level ± about 0.2 in).
 
-- `BANDS` in `code.py` (inches, each level ± about 0.2 in)
-- `REAL_LEVELS_MM` and `REAL_COLUMN_EMPTY_MM` on Render (mm; see `backend/app/config.py`)
+`REAL_LEVELS_MM` and `REAL_COLUMN_EMPTY_MM` on Render are only a fallback, used
+if a reading arrives without a fill % (older firmware).
 
 ## Wi-Fi
 

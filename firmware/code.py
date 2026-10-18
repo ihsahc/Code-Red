@@ -1,10 +1,9 @@
 """Code Red dispenser: Raspberry Pi Pico W + VL53L0X, CircuitPython.
 
 Counts the tampons in the column and prints what it sees. Whenever the count
-changes, and every few seconds anyway, it sends the settled sensor distance to
-the backend (POST /readings). The backend turns that distance into the count,
-fill % and status the website shows, using the same calibration
-(REAL_LEVELS_MM in backend/app/config.py).
+changes, and every few seconds anyway, it sends the fill percentage it worked
+out, plus the settled sensor distance, to the backend (POST /readings). The
+backend saves the Pico's fill % as is and works out the status from it.
 
 Settings (Wi-Fi, API URL, device key) live in settings.toml on the CIRCUITPY
 drive, not here. Set CALIBRATE = 1 there to print readings without sending.
@@ -96,13 +95,20 @@ def connect():
     return session
 
 
-def send(distance_mm):
+def fill_percent(count):
+    """Fill % for a tampon count. "LOW" counts as the most that could be left."""
+    if count == "LOW":
+        count = TOTAL - len(BANDS)  # column empty: 6 or fewer left in the tray
+    return round(count / TOTAL * 100, 1)
+
+
+def send(distance_mm, pct):
     """POST one reading. Returns what the website now shows, or None if it failed."""
     global session
     try:
         response = connect().post(
             API_URL + "/readings",
-            json={"dispenser_id": DISPENSER_ID, "distance_mm": distance_mm},
+            json={"dispenser_id": DISPENSER_ID, "distance_mm": distance_mm, "fill_percent": pct},
             headers={"X-Device-Key": DEVICE_KEY},
             timeout=REQUEST_TIMEOUT,
         )
@@ -139,6 +145,7 @@ else:
 recent = []
 status = "Starting up..."
 good_mm = None  # latest settled reading that matched a tampon level, in mm
+good_pct = None  # fill % for that reading
 last_try = None  # when we last tried to send
 last_try_status = None  # what the status was then
 
@@ -169,10 +176,11 @@ while True:
                 )
             else:
                 good_mm = round(avg * 25.4, 1)
+                good_pct = fill_percent(result)
                 if result == "LOW":
                     status = "LOW: 6 or fewer left, refill soon"
                 else:
-                    status = f"{result} left ({round(result / TOTAL * 100)}% full)"
+                    status = f"{result} left ({good_pct}% full)"
 
     print(f"{d:.2f} in -> {status}")
 
@@ -182,8 +190,8 @@ while True:
     due = last_try is None or status != last_try_status or now - last_try >= REPORT_EVERY_SECONDS
     if good_mm is not None and due and not CALIBRATE:
         last_try, last_try_status = now, status
-        shown = send(good_mm)
+        shown = send(good_mm, good_pct)
         if shown:
-            print(f"  sent {good_mm} mm -> website shows {shown}")
+            print(f"  sent {good_pct}% ({good_mm} mm) -> website shows {shown}")
 
     time.sleep(0.05)

@@ -90,6 +90,20 @@ def test_reading_updates_dispenser(client):
     assert d["status"] == "low" and d["fill_percent"] == 50.0 and d["units_left"] == 10
 
 
+def test_reading_uses_device_fill_percent(client):
+    # 225 mm would work out to 50%, but the device's own fill % wins.
+    r = client.post(
+        "/readings",
+        json={"dispenser_id": "near", "distance_mm": 225, "fill_percent": 84.6},
+        headers={"X-Device-Key": "k1"},
+    )
+    assert r.json() == {"dispenser_id": "near", "fill_percent": 84.6, "status": "full"}
+    assert client.get("/dispensers/near").json()["fill_percent"] == 84.6
+    assert client.get("/dispensers/near/history").json()[-1]["fill_percent"] == 84.6
+    bad = {"dispenser_id": "near", "distance_mm": 225, "fill_percent": 101}
+    assert client.post("/readings", json=bad, headers={"X-Device-Key": "k1"}).status_code == 422
+
+
 def test_never_reported_shows_offline(client):
     assert client.get("/dispensers/far").json()["status"] == "offline"
 

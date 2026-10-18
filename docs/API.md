@@ -186,8 +186,12 @@ frontend never calls this.
 Header: `X-Device-Key: <the dispenser's secret>`
 
 ```json
-{ "dispenser_id": "klaus-atrium-pico-w", "distance_mm": 300, "battery_v": 3.8 }
+{ "dispenser_id": "klaus-atrium-pico-w", "distance_mm": 104.9, "fill_percent": 61.5, "battery_v": 3.8 }
 ```
+
+`fill_percent` (0–100) is optional. The real Pico W works it out itself and
+sends it, and the server saves it as is. If it is left out (the simulated
+dispensers), the server works it out from `distance_mm`.
 
 Returns `201` with `{ "dispenser_id": "klaus-atrium-pico-w", "fill_percent": 27.8, "status": "low" }`,
 or `401` if the ID or key is wrong.
