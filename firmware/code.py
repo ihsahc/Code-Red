@@ -179,20 +179,24 @@ tof = adafruit_vl53l0x.VL53L0X(i2c)
 tof.measurement_timing_budget = 100000
 
 TOTAL = 13
-# Calibrated from the Oct 18 run (new setup).
+# Calibrated from two runs on Oct 18 (02:48 and 04:56). How the tampons stack
+# shifts some levels by up to 0.36 in between runs, so each band covers every
+# steady reading from both runs plus 0.1 in.
 # (tampons left, lowest OK reading, highest OK reading) in inches
 # A reading that settles in a gap between bands = something is misaligned
 BANDS = [
-    (13, 0.40, 0.85),
-    (12, 1.09, 1.49),
-    (11, 1.88, 2.28),
-    (10, 2.55, 2.95),
-    (9, 3.30, 3.70),
-    (8, 3.93, 4.33),
-    (7, 4.54, 4.90),
+    (13, 0.40, 0.85),  # seen 0.51-0.70
+    (12, 1.12, 1.47),  # seen 1.22-1.37
+    (11, 1.90, 2.58),  # seen 2.00-2.12 and 2.36-2.48
+    (10, 2.61, 3.09),  # seen 2.71-2.79 and 2.87-2.99
+    (9, 3.36, 3.84),  # seen 3.46-3.54 and 3.70-3.74
+    (8, 3.91, 4.27),  # seen 4.01-4.17
+    (7, 4.58, 4.80),  # seen 4.68-4.76
 ]
 TOO_CLOSE = 0.40  # closer than this: something is touching/blocking the sensor
-LOW_ZONE = 4.90  # 4.90 to 6.00: column is empty, 6 or fewer left in the tray
+# 4.80 to 6.00: the column is empty, 6 or fewer left in the tray. Seen: 5.07-5.23
+# right after the column empties, then 4.84-5.11 once the last ones settle.
+LOW_ZONE = 4.80
 LID_OPEN = 6.00  # farther than this: lid is off or the sensor isn't aimed into the column
 # (322.44 in = 8190 mm is the sensor's "nothing in range" code)
 STABLE_N = 3  # readings in a row that must agree (~1 second)
@@ -323,6 +327,9 @@ good_mm = None  # latest settled reading that matched a tampon level, in mm
 good_pct = None  # fill % for that reading
 last_try = None  # when we last tried to send
 last_try_status = None  # what the status was then
+# Once the column has emptied, stay LOW until a refill (8 or more): the bottom
+# reading sits close to the "7 left" level, and 6-or-fewer can't become 7 by itself.
+low_latched = False
 
 while True:
     d = read_inches()
@@ -341,6 +348,13 @@ while True:
         if settled:
             avg = sum(recent) / STABLE_N
             result = match(avg)
+
+            if result == "LOW":
+                low_latched = True
+            elif result == 7 and low_latched:
+                result = "LOW"  # still low: no refill has happened
+            elif result != "ERR":
+                low_latched = False  # 8 or more: refilled
 
             if result == "ERR":
                 # Works at any fill level, including right after power-on
