@@ -43,6 +43,13 @@ class ReadingIn(BaseModel):
 
     dispenser_id: str = Field(examples=["klaus-2f-w"])
     distance_mm: float = Field(ge=0, le=2000, description="Median of several VL53L0X readings")
+    fill_percent: float | None = Field(
+        default=None,
+        ge=0,
+        le=100,
+        description="Fill % worked out on the device. If sent, it is saved as is; if left out, "
+        "the server works it out from distance_mm.",
+    )
     battery_v: float | None = Field(default=None, ge=0, le=10)
 
 
